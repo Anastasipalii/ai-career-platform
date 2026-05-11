@@ -8,6 +8,7 @@ const navLinks = [
   { label: "Cover Letter", href: "/cover-letter" },
   { label: "LinkedIn", href: "/linkedin-optimizer" },
   { label: "Translate", href: "/resume-translation" },
+  { label: "Interview", href: "/interview-coach" },
   { label: "Pricing", href: "#pricing" },
   { label: "About", href: "#about" },
 ];

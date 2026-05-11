@@ -43,6 +43,7 @@ const tools: Tool[] = [
     description:
       "Practice with role-specific mock interviews powered by AI. Receive instant, detailed feedback on your answers, structure, and delivery — so every real interview feels rehearsed.",
     badge: null,
+    href: "/interview-coach",
   },
   {
     icon: (
