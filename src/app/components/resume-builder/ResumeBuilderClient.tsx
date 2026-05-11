@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { formatRelative } from "@/lib/formatRelative";
 import {
   ResumeFormData,
   CustomizationSettings,
   TemplateKey,
 } from "@/app/components/resume-builder/types";
+import Toast from "@/app/components/ui/Toast";
 import ResumeHero from "@/app/components/resume-builder/ResumeHero";
 import ResumeForm from "@/app/components/resume-builder/ResumeForm";
 import ResumeTemplates from "@/app/components/resume-builder/ResumeTemplates";
@@ -16,9 +18,32 @@ import AIFeaturesPanel from "@/app/components/resume-builder/AIFeaturesPanel";
 import ResumePreview from "@/app/components/resume-builder/ResumePreview";
 import ExportSection from "@/app/components/resume-builder/ExportSection";
 
+// ── Public type used by ExportSection ──────────────────────────────────────
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
-/* ─── Initial data ─── */
+// ── Saved resume shape (content is the JSONB blob from Supabase) ───────────
+interface ResumeContent {
+  formData: ResumeFormData;
+  settings: CustomizationSettings;
+}
+
+interface SavedResumeRecord {
+  id: string;
+  title: string;
+  language: string;
+  template_name: string | null;
+  ats_score: number | null;
+  content: ResumeContent;
+  updated_at: string;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+const TEMPLATE_KEYS: readonly TemplateKey[] = ["Minimal", "Corporate", "Creative", "Modern Tech"];
+function isTemplateKey(s: string | null): s is TemplateKey {
+  return s !== null && (TEMPLATE_KEYS as readonly string[]).includes(s);
+}
+
+// ── Initial data ─────────────────────────────────────────────────────────────
 const INITIAL_FORM_DATA: ResumeFormData = {
   fullName: "Alexandra Chen",
   jobTitle: "Senior Product Designer",
@@ -30,45 +55,15 @@ const INITIAL_FORM_DATA: ResumeFormData = {
   photoUrl: "",
   summary:
     "Senior Product Designer with 6+ years crafting AI-powered products at scale. Led design systems and zero-to-one products at Vercel and Linear. Passionate about accessibility, data-driven UX, and building design infrastructure that ships fast.",
-  skills: [
-    "Figma",
-    "UX Research",
-    "Design Systems",
-    "Prototyping",
-    "AI/ML Products",
-    "React",
-    "Accessibility",
-    "A/B Testing",
-  ],
+  skills: ["Figma", "UX Research", "Design Systems", "Prototyping", "AI/ML Products", "React", "Accessibility", "A/B Testing"],
   experience: [
-    {
-      id: "exp-1",
-      company: "Vercel",
-      role: "Senior Product Designer",
-      startDate: "Mar 2022",
-      endDate: "Present",
-      description:
-        "Led design for AI-powered developer tools used by 1M+ developers.\nBuilt and maintained Vercel's design system across 12 product surfaces.\nDrove 34% increase in deployment success rate through UX improvements.",
-    },
-    {
-      id: "exp-2",
-      company: "Linear",
-      role: "Product Designer",
-      startDate: "Jun 2020",
-      endDate: "Feb 2022",
-      description:
-        "Designed core issue tracking and project management workflows.\nReduced onboarding time by 40% through progressive disclosure redesign.\nCollaborated with engineering on React component library.",
-    },
+    { id: "exp-1", company: "Vercel", role: "Senior Product Designer", startDate: "Mar 2022", endDate: "Present",
+      description: "Led design for AI-powered developer tools used by 1M+ developers.\nBuilt and maintained Vercel's design system across 12 product surfaces.\nDrove 34% increase in deployment success rate through UX improvements." },
+    { id: "exp-2", company: "Linear", role: "Product Designer", startDate: "Jun 2020", endDate: "Feb 2022",
+      description: "Designed core issue tracking and project management workflows.\nReduced onboarding time by 40% through progressive disclosure redesign.\nCollaborated with engineering on React component library." },
   ],
   education: [
-    {
-      id: "edu-1",
-      institution: "UC Berkeley",
-      degree: "Bachelor of Arts",
-      field: "Cognitive Science & HCI",
-      startDate: "Sep 2016",
-      endDate: "May 2020",
-    },
+    { id: "edu-1", institution: "UC Berkeley", degree: "Bachelor of Arts", field: "Cognitive Science & HCI", startDate: "Sep 2016", endDate: "May 2020" },
   ],
   languages: [
     { id: "lang-1", language: "English", proficiency: "Native" },
@@ -83,7 +78,6 @@ const INITIAL_SETTINGS: CustomizationSettings = {
   spacing: "Balanced",
 };
 
-/* ─── Template presets ─── */
 const TEMPLATE_PRESETS: Record<TemplateKey, CustomizationSettings> = {
   Minimal:       { colorTheme: "Minimal Gray",   font: "Minimal",      layout: "One-column",  spacing: "Balanced" },
   Corporate:     { colorTheme: "Navy Blue",       font: "Professional", layout: "Two-column",  spacing: "Compact" },
@@ -91,13 +85,65 @@ const TEMPLATE_PRESETS: Record<TemplateKey, CustomizationSettings> = {
   "Modern Tech": { colorTheme: "Emerald Green",   font: "ModernSans",   layout: "Modern card", spacing: "Balanced" },
 };
 
-export default function ResumeBuilderClient() {
+// ── Props ────────────────────────────────────────────────────────────────────
+interface ResumeBuilderClientProps {
+  initialResumeId?: string;
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderClientProps) {
   const router = useRouter();
-  const [formData, setFormData] = useState<ResumeFormData>(INITIAL_FORM_DATA);
-  const [settings, setSettings] = useState<CustomizationSettings>(INITIAL_SETTINGS);
+
+  const [formData, setFormData]           = useState<ResumeFormData>(INITIAL_FORM_DATA);
+  const [settings, setSettings]           = useState<CustomizationSettings>(INITIAL_SETTINGS);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateKey>("Creative");
-  const [resumeId, setResumeId] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [resumeId, setResumeId]           = useState<string | null>(null);
+  const [saveStatus, setSaveStatus]       = useState<SaveStatus>("idle");
+  const [toast, setToast]                 = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [myResumes, setMyResumes]         = useState<SavedResumeRecord[]>([]);
+
+  // ── Utilities ──────────────────────────────────────────────────────────────
+
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  const fetchMyResumes = useCallback(async (uid: string): Promise<SavedResumeRecord[]> => {
+    const { data } = await supabase
+      .from("resumes")
+      .select("id, title, language, template_name, ats_score, content, updated_at")
+      .eq("user_id", uid)
+      .order("updated_at", { ascending: false });
+    return (data ?? []) as unknown as SavedResumeRecord[];
+  }, []);
+
+  const loadRecord = useCallback((record: SavedResumeRecord) => {
+    if (record.content?.formData) setFormData(record.content.formData);
+    if (record.content?.settings) setSettings(record.content.settings);
+    if (isTemplateKey(record.template_name)) setSelectedTemplate(record.template_name);
+    setResumeId(record.id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  // ── Mount: load list + optionally pre-load a specific resume ───────────────
+  useEffect(() => {
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const records = await fetchMyResumes(session.user.id);
+      setMyResumes(records);
+
+      if (initialResumeId) {
+        const target = records.find((r) => r.id === initialResumeId);
+        if (target) loadRecord(target);
+      }
+    }
+    init();
+  }, [initialResumeId, fetchMyResumes, loadRecord]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleSelectTemplate = (key: TemplateKey) => {
     setSelectedTemplate(key);
@@ -118,52 +164,84 @@ export default function ResumeBuilderClient() {
       [formData.fullName, formData.jobTitle].filter(Boolean).join(" — ") ||
       "Untitled Resume";
 
-    const sharedPayload = {
+    const payload = {
       title,
       language: formData.languages[0]?.language ?? "English (US)",
       template_name: selectedTemplate,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      content: { formData, settings } as any,
+      content: { formData, settings } as unknown as Record<string, unknown>,
     };
 
     if (resumeId) {
       const { error } = await supabase
         .from("resumes")
-        .update(sharedPayload)
+        .update(payload)
         .eq("id", resumeId);
-      if (error) { setSaveStatus("error"); return; }
+      if (error) {
+        setSaveStatus("error");
+        showToast(`Save failed: ${error.message}`, "error");
+        return;
+      }
     } else {
       const { data, error } = await supabase
         .from("resumes")
-        .insert({ ...sharedPayload, user_id: session.user.id })
+        .insert({ ...payload, user_id: session.user.id })
         .select("id")
         .single();
-      if (error || !data) { setSaveStatus("error"); return; }
+      if (error || !data) {
+        setSaveStatus("error");
+        showToast(error?.message ?? "Save failed.", "error");
+        return;
+      }
       setResumeId((data as { id: string }).id);
     }
 
+    const records = await fetchMyResumes(session.user.id);
+    setMyResumes(records);
+
     setSaveStatus("saved");
+    showToast("Resume saved successfully!", "success");
     setTimeout(() => setSaveStatus("idle"), 3000);
   };
 
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Delete this resume? This cannot be undone.")) return;
+
+    const { error } = await supabase.from("resumes").delete().eq("id", id);
+    if (error) {
+      showToast("Failed to delete resume.", "error");
+      return;
+    }
+
+    setMyResumes((prev) => prev.filter((r) => r.id !== id));
+
+    if (resumeId === id) {
+      setResumeId(null);
+      setFormData(INITIAL_FORM_DATA);
+      setSettings(INITIAL_SETTINGS);
+      setSelectedTemplate("Creative");
+    }
+
+    showToast("Resume deleted.", "success");
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
+
       <ResumeHero />
       <div className="section-divider" />
 
       {/* ── Builder ── */}
       <section className="py-16 relative">
-        {/* Background orb */}
         <div
           className="absolute top-0 left-0 w-[500px] h-[500px] rounded-full pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(124,58,237,0.05) 0%, transparent 65%)",
-          }}
+          style={{ background: "radial-gradient(circle, rgba(124,58,237,0.05) 0%, transparent 65%)" }}
         />
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Section label */}
           <div className="flex items-center gap-3 mb-8">
             <div className="section-divider flex-1" />
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
@@ -173,10 +251,8 @@ export default function ResumeBuilderClient() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
-            {/* Left — form */}
             <ResumeForm formData={formData} onChange={setFormData} />
 
-            {/* Right — sticky panel */}
             <div className="lg:sticky lg:top-24 self-start flex flex-col gap-5">
               <CustomizationPanel settings={settings} onChange={setSettings} />
               <ResumePreview formData={formData} settings={settings} />
@@ -193,8 +269,164 @@ export default function ResumeBuilderClient() {
 
       <div className="section-divider" />
       <ResumeTemplates selectedTemplate={selectedTemplate} onSelect={handleSelectTemplate} />
+
+      {/* ── My Resumes ── */}
+      {myResumes.length > 0 && (
+        <>
+          <div className="section-divider" />
+          <MyResumesSection
+            resumes={myResumes}
+            activeId={resumeId}
+            onOpen={loadRecord}
+            onDelete={handleDelete}
+          />
+        </>
+      )}
+
       <div className="section-divider" />
       <AIFeaturesPanel />
     </>
+  );
+}
+
+// ── My Resumes section ────────────────────────────────────────────────────────
+function MyResumesSection({
+  resumes,
+  activeId,
+  onOpen,
+  onDelete,
+}: {
+  resumes: SavedResumeRecord[];
+  activeId: string | null;
+  onOpen: (record: SavedResumeRecord) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <section className="py-16 relative">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="section-divider flex-1" />
+          <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
+            My resumes
+          </span>
+          <div className="section-divider flex-1" />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {resumes.map((record) => (
+            <ResumeCard
+              key={record.id}
+              record={record}
+              isActive={activeId === record.id}
+              onOpen={() => onOpen(record)}
+              onDelete={() => onDelete(record.id)}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Individual resume card ────────────────────────────────────────────────────
+function ResumeCard({
+  record,
+  isActive,
+  onOpen,
+  onDelete,
+}: {
+  record: SavedResumeRecord;
+  isActive: boolean;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className="rounded-2xl p-4 border transition-all duration-200 hover:-translate-y-0.5"
+      style={{
+        background: "rgba(13,13,22,0.6)",
+        borderColor: isActive ? "rgba(124,58,237,0.45)" : "rgba(255,255,255,0.07)",
+        boxShadow: isActive ? "0 0 0 1px rgba(124,58,237,0.25)" : "none",
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-start gap-3 mb-3">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.2)" }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#a78bfa" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 1.5H3.5a1 1 0 00-1 1v11a1 1 0 001 1h9a1 1 0 001-1V5L9 1.5z" />
+            <path d="M9 1.5V5h3.5" />
+          </svg>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-white truncate leading-snug">{record.title}</p>
+          <p className="text-xs text-slate-500 mt-0.5 truncate">
+            {record.template_name ?? "Custom"} · {record.language}
+          </p>
+        </div>
+
+        {isActive && (
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0"
+            style={{ background: "rgba(124,58,237,0.15)", color: "#a78bfa", border: "1px solid rgba(124,58,237,0.25)" }}
+          >
+            Editing
+          </span>
+        )}
+      </div>
+
+      <p className="text-[11px] text-slate-600 mb-3">
+        Updated {formatRelative(record.updated_at)}
+      </p>
+
+      {/* ATS score if available */}
+      {record.ats_score !== null && (
+        <div className="mb-3">
+          <div className="flex items-center justify-between text-[10px] text-slate-600 mb-1">
+            <span>ATS Score</span>
+            <span style={{ color: record.ats_score >= 90 ? "#10b981" : record.ats_score >= 75 ? "#7c3aed" : "#f59e0b" }}>
+              {record.ats_score}%
+            </span>
+          </div>
+          <div className="h-1 rounded-full" style={{ background: "rgba(255,255,255,0.07)" }}>
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${record.ats_score}%`,
+                background: record.ats_score >= 90 ? "#10b981" : record.ats_score >= 75 ? "#7c3aed" : "#f59e0b",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onOpen}
+          disabled={isActive}
+          className="flex-1 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: "rgba(124,58,237,0.12)", color: "#a78bfa", border: "1px solid rgba(124,58,237,0.2)" }}
+        >
+          {isActive ? "Currently editing" : "Open"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onDelete}
+          title="Delete resume"
+          className="px-3 py-2 rounded-lg transition-all duration-200 hover:opacity-90"
+          style={{ background: "rgba(239,68,68,0.06)", color: "#f87171", border: "1px solid rgba(239,68,68,0.15)" }}
+        >
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 3.5h9M5.5 3.5V2.5h2v1M3.5 3.5l.5 7h5l.5-7" />
+          </svg>
+        </button>
+      </div>
+    </div>
   );
 }

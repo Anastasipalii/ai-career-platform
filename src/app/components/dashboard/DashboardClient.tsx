@@ -191,6 +191,13 @@ export default function DashboardClient() {
     router.push("/login");
   };
 
+  const handleDeleteResume = async (id: string) => {
+    const { error } = await supabase.from("resumes").delete().eq("id", id);
+    if (!error) {
+      setResumes((prev) => prev.filter((r) => r.id !== id));
+    }
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -250,7 +257,11 @@ export default function DashboardClient() {
           </div>
 
           <div className="mb-5">
-            <SavedResumes resumes={resumes} formatRelative={formatRelative} />
+            <SavedResumes
+              resumes={resumes}
+              formatRelative={formatRelative}
+              onDelete={handleDeleteResume}
+            />
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5 mb-5">

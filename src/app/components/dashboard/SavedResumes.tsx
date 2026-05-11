@@ -1,9 +1,13 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { ResumeRow } from "@/app/components/dashboard/DashboardClient";
 
 interface SavedResumesProps {
   resumes: ResumeRow[];
   formatRelative: (iso: string) => string;
+  onDelete: (id: string) => Promise<void>;
 }
 
 function AtsBar({ score }: { score: number }) {
@@ -18,7 +22,17 @@ function AtsBar({ score }: { score: number }) {
   );
 }
 
-export default function SavedResumes({ resumes, formatRelative }: SavedResumesProps) {
+export default function SavedResumes({ resumes, formatRelative, onDelete }: SavedResumesProps) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId]           = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    await onDelete(id);
+    setDeletingId(null);
+    setConfirmDeleteId(null);
+  };
+
   return (
     <div
       className="rounded-2xl border overflow-hidden"
@@ -101,14 +115,53 @@ export default function SavedResumes({ resumes, formatRelative }: SavedResumesPr
               </div>
 
               {/* Actions */}
-              <div className="shrink-0">
-                <Link
-                  href="/resume-builder"
-                  className="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 hover:opacity-90"
-                  style={{ background: "rgba(124,58,237,0.1)", color: "#a78bfa", border: "1px solid rgba(124,58,237,0.2)" }}
-                >
-                  Edit
-                </Link>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {confirmDeleteId === resume.id ? (
+                  /* Two-step delete confirmation */
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-90"
+                      style={{ background: "rgba(255,255,255,0.05)", color: "#64748b", border: "1px solid rgba(255,255,255,0.08)" }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(resume.id)}
+                      disabled={deletingId === resume.id}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-90 disabled:opacity-60"
+                      style={{ background: "rgba(239,68,68,0.1)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.2)" }}
+                    >
+                      {deletingId === resume.id ? (
+                        <svg className="animate-spin" width="11" height="11" viewBox="0 0 11 11" fill="none">
+                          <circle cx="5.5" cy="5.5" r="4" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
+                          <path d="M5.5 1.5a4 4 0 014 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                      ) : "Confirm"}
+                    </button>
+                  </>
+                ) : (
+                  /* Normal actions */
+                  <>
+                    <Link
+                      href={`/resume-builder?id=${resume.id}`}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-90"
+                      style={{ background: "rgba(124,58,237,0.1)", color: "#a78bfa", border: "1px solid rgba(124,58,237,0.2)" }}
+                    >
+                      Edit
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(resume.id)}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-90"
+                      style={{ background: "rgba(255,255,255,0.03)", color: "#64748b", border: "1px solid rgba(255,255,255,0.07)" }}
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}

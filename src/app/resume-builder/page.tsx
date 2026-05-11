@@ -9,12 +9,17 @@ export const metadata: Metadata = {
     "Build a professional, ATS-optimized resume in minutes. AI rewrites your content, translates to 30+ languages, and applies premium templates tailored to your target role.",
 };
 
-export default function ResumeBuilderPage() {
+interface PageProps {
+  searchParams: Promise<{ id?: string }>;
+}
+
+export default async function ResumeBuilderPage({ searchParams }: PageProps) {
+  const { id } = await searchParams;
   return (
     <>
       <Navbar />
       <main className="pt-16">
-        <ResumeBuilderClient />
+        <ResumeBuilderClient initialResumeId={id} />
       </main>
       <Footer />
     </>
