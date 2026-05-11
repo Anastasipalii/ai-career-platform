@@ -74,6 +74,7 @@ const tools: Tool[] = [
     description:
       "Transform your LinkedIn profile with AI-written headlines, summaries, and bullet points that are crafted to increase recruiter visibility and profile views.",
     badge: null,
+    href: "/linkedin-optimizer",
   },
   {
     icon: (
