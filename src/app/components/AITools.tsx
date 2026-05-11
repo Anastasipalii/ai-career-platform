@@ -8,6 +8,7 @@ interface Tool {
   title: string;
   description: string;
   badge: string | null;
+  href?: string;
 }
 
 const tools: Tool[] = [
@@ -27,6 +28,7 @@ const tools: Tool[] = [
     description:
       "Build an ATS-friendly resume with professional templates, color and font customization, and flexible layouts. AI rewrites your content per job description — export to PDF in one click.",
     badge: "Most popular",
+    href: "/resume-builder",
   },
   {
     icon: (
@@ -100,6 +102,7 @@ const tools: Tool[] = [
     description:
       "Generate a compelling, personalized cover letter in one click. AI adapts the tone and narrative to the specific company and role — so you never start from a blank page.",
     badge: null,
+    href: "/cover-letter",
   },
   {
     icon: (
@@ -187,18 +190,34 @@ export default function AITools() {
               <p className="text-slate-500 text-sm leading-relaxed">{tool.description}</p>
 
               {/* Arrow */}
-              <div
-                className="mt-4 flex items-center gap-1.5 text-xs font-medium"
-                style={{ color: tool.color }}
-              >
-                Learn more
-                <svg
-                  width="13" height="13" viewBox="0 0 13 13" fill="none"
-                  className="group-hover:translate-x-1 transition-transform duration-200"
+              {tool.href ? (
+                <a
+                  href={tool.href}
+                  className="mt-4 flex items-center gap-1.5 text-xs font-medium w-fit"
+                  style={{ color: tool.color }}
                 >
-                  <path d="M2 6.5h9M7.5 3l3.5 3.5-3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
+                  Learn more
+                  <svg
+                    width="13" height="13" viewBox="0 0 13 13" fill="none"
+                    className="group-hover:translate-x-1 transition-transform duration-200"
+                  >
+                    <path d="M2 6.5h9M7.5 3l3.5 3.5-3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </a>
+              ) : (
+                <div
+                  className="mt-4 flex items-center gap-1.5 text-xs font-medium"
+                  style={{ color: tool.color }}
+                >
+                  Learn more
+                  <svg
+                    width="13" height="13" viewBox="0 0 13 13" fill="none"
+                    className="group-hover:translate-x-1 transition-transform duration-200"
+                  >
+                    <path d="M2 6.5h9M7.5 3l3.5 3.5-3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              )}
             </div>
           ))}
         </div>
