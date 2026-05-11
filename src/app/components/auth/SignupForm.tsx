@@ -102,21 +102,22 @@ export default function SignupForm() {
         </p>
       </div>
 
-      {/* Google */}
+      {/* Google — coming soon */}
       <button
         type="button"
-        onClick={handleGoogle}
-        disabled={googleLoading || loading}
-        className="w-full flex items-center justify-center gap-3 py-3 rounded-xl border text-sm font-medium text-slate-300 hover:text-white hover:border-white/25 transition-all duration-200 disabled:opacity-60 mb-5"
-        style={{ borderColor: "rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}
+        disabled
+        className="w-full flex items-center justify-center gap-3 py-3 rounded-xl border text-sm font-medium text-slate-600 cursor-not-allowed mb-5"
+        style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
+        title="Google sign-in coming soon"
       >
-        {googleLoading ? (
-          <svg className="animate-spin" width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <circle cx="9" cy="9" r="7" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
-            <path d="M9 2a7 7 0 017 7" stroke="white" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        ) : <GoogleIcon />}
-        {googleLoading ? "Connecting…" : "Continue with Google"}
+        <GoogleIcon />
+        Continue with Google
+        <span
+          className="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+          style={{ background: "rgba(255,255,255,0.06)", color: "#475569" }}
+        >
+          Soon
+        </span>
       </button>
 
       {/* Divider */}
@@ -220,14 +221,27 @@ export default function SignupForm() {
 
         {/* Agreement */}
         <div>
-          <label className="flex items-start gap-2.5 cursor-pointer">
+          <label htmlFor="agree-terms" className="flex items-start gap-2.5 cursor-pointer select-none">
+            {/* Hidden native checkbox — makes the whole label clickable */}
+            <input
+              id="agree-terms"
+              type="checkbox"
+              className="sr-only"
+              checked={agreed}
+              onChange={(e) => { setAgreed(e.target.checked); clearError("agreed"); }}
+            />
+            {/* Custom visual checkbox */}
             <div
+              aria-hidden="true"
               className="w-4 h-4 rounded flex items-center justify-center transition-all duration-150 mt-0.5 shrink-0"
               style={{
                 background: agreed ? "#7c3aed" : "rgba(255,255,255,0.05)",
-                border: errors.agreed ? "1px solid rgba(239,68,68,0.5)" : agreed ? "1px solid #7c3aed" : "1px solid rgba(255,255,255,0.12)",
+                border: errors.agreed
+                  ? "1px solid rgba(239,68,68,0.5)"
+                  : agreed
+                  ? "1px solid #7c3aed"
+                  : "1px solid rgba(255,255,255,0.12)",
               }}
-              onClick={() => { setAgreed(!agreed); clearError("agreed"); }}
             >
               {agreed && (
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -237,22 +251,30 @@ export default function SignupForm() {
             </div>
             <span className="text-xs text-slate-400 leading-relaxed">
               I agree to the{" "}
-              <span className="text-violet-400 hover:text-violet-300 cursor-pointer">Terms of Service</span>
+              <span className="text-violet-400 hover:text-violet-300">Terms of Service</span>
               {" "}and{" "}
-              <span className="text-violet-400 hover:text-violet-300 cursor-pointer">Privacy Policy</span>
+              <span className="text-violet-400 hover:text-violet-300">Privacy Policy</span>
             </span>
           </label>
-          {errors.agreed && <p className="text-xs text-red-400 mt-1.5">{errors.agreed}</p>}
+          {errors.agreed && (
+            <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1.25" />
+                <path d="M6 3.5v3M6 8v.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+              </svg>
+              {errors.agreed}
+            </p>
+          )}
         </div>
 
-        {/* Submit */}
+        {/* Submit — disabled until terms accepted */}
         <button
           type="submit"
-          disabled={loading || googleLoading}
+          disabled={loading || googleLoading || !agreed}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 mt-1"
           style={{
             background: "linear-gradient(135deg, #7c3aed, #06b6d4)",
-            boxShadow: loading ? "none" : "0 0 28px rgba(124,58,237,0.35)",
+            boxShadow: loading || !agreed ? "none" : "0 0 28px rgba(124,58,237,0.35)",
           }}
         >
           {loading ? (
