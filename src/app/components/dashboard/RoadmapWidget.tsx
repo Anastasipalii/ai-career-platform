@@ -1,13 +1,5 @@
 import Link from "next/link";
 
-const PROGRESS = 30;
-const PHASES = [
-  { label: "Foundation",    color: "#ec4899", done: true },
-  { label: "Portfolio",     color: "#8b5cf6", done: false },
-  { label: "Applications",  color: "#06b6d4", done: false },
-  { label: "Interviews",    color: "#10b981", done: false },
-];
-
 export default function RoadmapWidget() {
   return (
     <div
@@ -24,57 +16,24 @@ export default function RoadmapWidget() {
         </Link>
       </div>
 
-      <div className="p-5">
-        {/* Role transition */}
-        <div className="flex items-center gap-2 mb-4 text-xs">
-          <span className="font-medium text-white">Senior Product Designer</span>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: "#ec4899" }}>
-            <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span className="font-medium text-white">Head of Design</span>
-        </div>
-
-        {/* Progress bar */}
-        <div className="mb-3">
-          <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-slate-500">Overall progress</span>
-            <span className="font-semibold" style={{ color: "#ec4899" }}>{PROGRESS}%</span>
-          </div>
-          <div className="h-2 rounded-full" style={{ background: "rgba(255,255,255,0.06)" }}>
-            <div
-              className="h-full rounded-full transition-all duration-700"
-              style={{ width: `${PROGRESS}%`, background: "linear-gradient(90deg, #be185d, #ec4899)" }}
-            />
-          </div>
-        </div>
-
-        {/* Phase dots */}
-        <div className="flex items-center gap-2 mb-4">
-          {PHASES.map((phase, i) => (
-            <div key={phase.label} className="flex items-center gap-1.5 flex-1">
-              <div
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ background: phase.done ? phase.color : "rgba(255,255,255,0.15)" }}
-              />
-              <span className="text-[10px] truncate" style={{ color: phase.done ? phase.color : "#475569" }}>
-                {phase.label}
-              </span>
-              {i < PHASES.length - 1 && (
-                <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Next milestone */}
+      <div className="flex flex-col items-center justify-center py-10 px-5 text-center">
         <div
-          className="rounded-xl p-3 text-xs"
-          style={{ background: "rgba(236,72,153,0.07)", border: "1px solid rgba(236,72,153,0.15)" }}
+          className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+          style={{ background: "rgba(236,72,153,0.1)", border: "1px solid rgba(236,72,153,0.15)" }}
         >
-          <p className="text-slate-500 mb-0.5">Next milestone</p>
-          <p className="font-medium text-white">Complete Motion Design course</p>
-          <p className="text-slate-600 mt-0.5">9 months remaining · Phase 1</p>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#f9a8d4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="1 13 5 8 9 11 13 5 17 7" />
+          </svg>
         </div>
+        <p className="text-sm font-medium text-slate-400 mb-1">No roadmap created yet</p>
+        <p className="text-xs text-slate-600 mb-3">Map your path from where you are to where you want to be.</p>
+        <Link
+          href="/career-path"
+          className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90"
+          style={{ background: "rgba(236,72,153,0.12)", color: "#f9a8d4", border: "1px solid rgba(236,72,153,0.2)" }}
+        >
+          Create roadmap
+        </Link>
       </div>
     </div>
   );

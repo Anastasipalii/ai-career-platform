@@ -84,12 +84,13 @@ export default function SignupForm() {
     setGoogleLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/dashboard` },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) {
       setErrors({ email: error.message });
       setGoogleLoading(false);
     }
+    // On success the browser redirects; no need to reset state
   };
 
   return (
@@ -102,22 +103,23 @@ export default function SignupForm() {
         </p>
       </div>
 
-      {/* Google — coming soon */}
+      {/* Google */}
       <button
         type="button"
-        disabled
-        className="w-full flex items-center justify-center gap-3 py-3 rounded-xl border text-sm font-medium text-slate-600 cursor-not-allowed mb-5"
-        style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
-        title="Google sign-in coming soon"
+        onClick={handleGoogle}
+        disabled={googleLoading || loading}
+        className="w-full flex items-center justify-center gap-3 py-3 rounded-xl border text-sm font-medium text-slate-300 hover:text-white hover:border-white/25 transition-all duration-200 disabled:opacity-60 mb-5"
+        style={{ borderColor: "rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}
       >
-        <GoogleIcon />
-        Continue with Google
-        <span
-          className="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-          style={{ background: "rgba(255,255,255,0.06)", color: "#475569" }}
-        >
-          Soon
-        </span>
+        {googleLoading ? (
+          <svg className="animate-spin" width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <circle cx="9" cy="9" r="7" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+            <path d="M9 2a7 7 0 017 7" stroke="white" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        ) : (
+          <GoogleIcon />
+        )}
+        {googleLoading ? "Connecting…" : "Continue with Google"}
       </button>
 
       {/* Divider */}
