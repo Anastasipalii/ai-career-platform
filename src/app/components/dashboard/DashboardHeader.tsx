@@ -25,7 +25,7 @@ export default function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
 
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            Welcome back, Anastasiia&nbsp;👋
+            Welcome back, Emma&nbsp;👋
           </h1>
           <p className="text-slate-400 text-sm mt-1">
             Track your resumes, AI tools, and career progress in one place.

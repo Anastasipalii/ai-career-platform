@@ -121,7 +121,7 @@ export default function SignupForm() {
           <input
             type="text"
             className={errors.fullName ? inputErrCls : inputCls}
-            placeholder="Anastasiia Paliy"
+            placeholder="Emma Wilson"
             value={fullName}
             onChange={(e) => { setFullName(e.target.value); clearError("fullName"); }}
           />

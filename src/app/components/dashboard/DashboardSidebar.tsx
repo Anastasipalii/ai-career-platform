@@ -218,8 +218,8 @@ export default function DashboardSidebar({ activePath = "/dashboard", onClose }:
             A
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">Anastasiia</p>
-            <p className="text-xs text-slate-500 truncate">anastasiapaliy97@gmail.com</p>
+            <p className="text-sm font-medium text-white truncate">Emma Wilson</p>
+            <p className="text-xs text-slate-500 truncate">emma.wilson@email.com</p>
           </div>
           <div
             className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0"
