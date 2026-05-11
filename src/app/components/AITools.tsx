@@ -1,3 +1,6 @@
+"use client";
+
+import Link from "next/link";
 import { FileText, Mail, Search, Network, TrendingUp, Languages, Mic } from "lucide-react";
 import { ReactNode } from "react";
 
@@ -120,12 +123,21 @@ export default function AITools() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {tools.map((tool) => (
-            <div
+            <Link
               key={tool.title}
-              className="group relative rounded-2xl p-5 border transition-all duration-300 hover:border-white/20 hover:-translate-y-0.5 cursor-pointer"
+              href={tool.href ?? "#"}
+              className="group relative rounded-2xl p-5 border transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] cursor-pointer block"
               style={{
                 background: "rgba(13,13,22,0.6)",
                 borderColor: "rgba(255,255,255,0.07)",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLAnchorElement).style.borderColor = `${tool.color}55`;
+                (e.currentTarget as HTMLAnchorElement).style.boxShadow = `0 0 24px ${tool.color}22, 0 8px 32px rgba(0,0,0,0.3)`;
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.07)";
+                (e.currentTarget as HTMLAnchorElement).style.boxShadow = "none";
               }}
             >
               {/* Hover glow */}
@@ -158,29 +170,19 @@ export default function AITools() {
               <p className="text-slate-500 text-sm leading-relaxed">{tool.description}</p>
 
               {/* Arrow */}
-              {tool.href ? (
-                <a
-                  href={tool.href}
-                  className="mt-4 flex items-center gap-1.5 text-xs font-medium w-fit"
-                  style={{ color: tool.color }}
+              <div
+                className="mt-4 flex items-center gap-1.5 text-xs font-medium"
+                style={{ color: tool.color }}
+              >
+                Learn more
+                <svg
+                  width="13" height="13" viewBox="0 0 13 13" fill="none"
+                  className="group-hover:translate-x-1 transition-transform duration-200"
                 >
-                  Learn more
-                  <svg
-                    width="13" height="13" viewBox="0 0 13 13" fill="none"
-                    className="group-hover:translate-x-1 transition-transform duration-200"
-                  >
-                    <path d="M2 6.5h9M7.5 3l3.5 3.5-3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </a>
-              ) : (
-                <div className="mt-4 flex items-center gap-1.5 text-xs font-medium" style={{ color: tool.color }}>
-                  Learn more
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="group-hover:translate-x-1 transition-transform duration-200">
-                    <path d="M2 6.5h9M7.5 3l3.5 3.5-3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-              )}
-            </div>
+                  <path d="M2 6.5h9M7.5 3l3.5 3.5-3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            </Link>
           ))}
         </div>
       </div>

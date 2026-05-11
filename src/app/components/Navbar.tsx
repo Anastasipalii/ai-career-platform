@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import {
   FileText, Mail, Network, Languages, Mic,
   Search, TrendingUp, ChevronDown, Menu, X,
@@ -108,7 +109,7 @@ export default function Navbar() {
         <div className="flex items-center h-16 gap-6">
 
           {/* ── Logo ── */}
-          <a href="/" className="flex items-center gap-2.5 shrink-0 mr-2">
+          <Link href="/" className="flex items-center gap-2.5 shrink-0 mr-2">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center"
               style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
@@ -119,7 +120,7 @@ export default function Navbar() {
               </svg>
             </div>
             <span className="text-white font-semibold text-[17px] tracking-tight">CareerAI</span>
-          </a>
+          </Link>
 
           {/* ── Desktop nav ── */}
           <nav className="hidden md:flex items-center gap-1 flex-1">
@@ -159,7 +160,7 @@ export default function Navbar() {
 
                   <div className="grid grid-cols-2 gap-0.5">
                     {TOOLS.map((tool) => (
-                      <a
+                      <Link
                         key={tool.href}
                         href={tool.href}
                         onClick={closeAll}
@@ -182,7 +183,7 @@ export default function Navbar() {
                           <p className="text-[13px] font-semibold text-white leading-snug">{tool.label}</p>
                           <p className="text-[11px] text-slate-500 mt-0.5 leading-snug truncate">{tool.description}</p>
                         </div>
-                      </a>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -191,29 +192,29 @@ export default function Navbar() {
 
             {/* Flat links */}
             {NAV_LINKS.map((link) => (
-              <a
+              <Link
                 key={link.label}
                 href={link.href}
                 onClick={closeAll}
                 className="px-3.5 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 transition-colors duration-150"
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
           </nav>
 
           {/* ── Desktop CTAs ── */}
           <div className="hidden md:flex items-center gap-2 shrink-0 ml-auto">
-            <a href="/login" className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors">
+            <Link href="/login" className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors">
               Sign in
-            </a>
-            <a
+            </Link>
+            <Link
               href="/signup"
               className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02]"
               style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
             >
               Get started free
-            </a>
+            </Link>
           </div>
 
           {/* ── Mobile hamburger ── */}
@@ -256,7 +257,7 @@ export default function Navbar() {
                 style={{ borderColor: "rgba(255,255,255,0.08)" }}
               >
                 {TOOLS.map((tool) => (
-                  <a
+                  <Link
                     key={tool.href}
                     href={tool.href}
                     onClick={closeAll}
@@ -264,38 +265,38 @@ export default function Navbar() {
                   >
                     <span style={{ color: tool.color }}>{tool.icon}</span>
                     {tool.label}
-                  </a>
+                  </Link>
                 ))}
               </div>
             )}
 
             {NAV_LINKS.map((link) => (
-              <a
+              <Link
                 key={link.label}
                 href={link.href}
                 onClick={closeAll}
                 className="px-3.5 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-150"
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
 
             <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-white/[0.06]">
-              <a
+              <Link
                 href="/login"
                 onClick={closeAll}
                 className="w-full text-center py-2.5 rounded-xl text-sm font-medium text-slate-300 border border-white/[0.09] hover:border-white/20 hover:text-white transition-all"
               >
                 Sign in
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/signup"
                 onClick={closeAll}
                 className="w-full text-center py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
                 style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
               >
                 Get started free
-              </a>
+              </Link>
             </div>
           </div>
         </div>
