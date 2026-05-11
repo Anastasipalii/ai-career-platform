@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import {
   ResumeFormData,
   CustomizationSettings,
@@ -13,6 +15,8 @@ import CustomizationPanel from "@/app/components/resume-builder/CustomizationPan
 import AIFeaturesPanel from "@/app/components/resume-builder/AIFeaturesPanel";
 import ResumePreview from "@/app/components/resume-builder/ResumePreview";
 import ExportSection from "@/app/components/resume-builder/ExportSection";
+
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 /* ─── Initial data ─── */
 const INITIAL_FORM_DATA: ResumeFormData = {
@@ -88,13 +92,58 @@ const TEMPLATE_PRESETS: Record<TemplateKey, CustomizationSettings> = {
 };
 
 export default function ResumeBuilderClient() {
+  const router = useRouter();
   const [formData, setFormData] = useState<ResumeFormData>(INITIAL_FORM_DATA);
   const [settings, setSettings] = useState<CustomizationSettings>(INITIAL_SETTINGS);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateKey>("Creative");
+  const [resumeId, setResumeId] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   const handleSelectTemplate = (key: TemplateKey) => {
     setSelectedTemplate(key);
     setSettings(TEMPLATE_PRESETS[key]);
+  };
+
+  const handleSave = async () => {
+    setSaveStatus("saving");
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setSaveStatus("idle");
+      router.push("/login");
+      return;
+    }
+
+    const title =
+      [formData.fullName, formData.jobTitle].filter(Boolean).join(" — ") ||
+      "Untitled Resume";
+
+    const sharedPayload = {
+      title,
+      language: formData.languages[0]?.language ?? "English (US)",
+      template_name: selectedTemplate,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      content: { formData, settings } as any,
+    };
+
+    if (resumeId) {
+      const { error } = await supabase
+        .from("resumes")
+        .update(sharedPayload)
+        .eq("id", resumeId);
+      if (error) { setSaveStatus("error"); return; }
+    } else {
+      const { data, error } = await supabase
+        .from("resumes")
+        .insert({ ...sharedPayload, user_id: session.user.id })
+        .select("id")
+        .single();
+      if (error || !data) { setSaveStatus("error"); return; }
+      setResumeId((data as { id: string }).id);
+    }
+
+    setSaveStatus("saved");
+    setTimeout(() => setSaveStatus("idle"), 3000);
   };
 
   return (
@@ -131,7 +180,12 @@ export default function ResumeBuilderClient() {
             <div className="lg:sticky lg:top-24 self-start flex flex-col gap-5">
               <CustomizationPanel settings={settings} onChange={setSettings} />
               <ResumePreview formData={formData} settings={settings} />
-              <ExportSection formData={formData} />
+              <ExportSection
+                formData={formData}
+                onSave={handleSave}
+                saveStatus={saveStatus}
+                isSaved={resumeId !== null}
+              />
             </div>
           </div>
         </div>
