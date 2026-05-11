@@ -25,7 +25,7 @@ const tools: Tool[] = [
     border: "rgba(124,58,237,0.2)",
     title: "Resume Builder AI",
     description:
-      "Create a tailored, ATS-optimized resume in minutes. Choose from professional templates, and let AI adapt your content to match each job description precisely.",
+      "Build an ATS-friendly resume with professional templates, color and font customization, and flexible layouts. AI rewrites your content per job description — export to PDF in one click.",
     badge: "Most popular",
   },
   {
@@ -114,24 +114,7 @@ const tools: Tool[] = [
     border: "rgba(16,185,129,0.2)",
     title: "Resume Translation",
     description:
-      "Instantly translate your resume into 30+ languages while preserving professional formatting and tone. Expand your job search globally without any manual rework.",
-    badge: null,
-  },
-  {
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="3" width="7" height="7" rx="1" />
-        <rect x="3" y="14" width="7" height="7" rx="1" />
-        <rect x="14" y="14" width="7" height="7" rx="1" />
-      </svg>
-    ),
-    color: "#a78bfa",
-    bg: "rgba(167,139,250,0.1)",
-    border: "rgba(167,139,250,0.2)",
-    title: "Resume Templates",
-    description:
-      "Browse a curated library of modern, ATS-friendly templates designed by career experts. Seamlessly integrated into Resume Builder — pick a style and start building instantly.",
+      "Upload an existing resume or PDF and instantly translate it into 30+ languages. Professional formatting and tone are preserved — ready to send without any manual rework.",
     badge: null,
   },
 ];
@@ -159,7 +142,7 @@ export default function AITools() {
             <span className="gradient-text">get hired faster</span>
           </h2>
           <p className="text-slate-400 text-base max-w-xl mx-auto leading-relaxed">
-            Eight AI-powered tools working together — from first draft to signed offer letter.
+            Seven AI-powered tools working together — from first draft to signed offer letter.
           </p>
         </div>
 
