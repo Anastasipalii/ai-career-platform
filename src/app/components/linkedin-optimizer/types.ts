@@ -79,15 +79,15 @@ export const CAREER_GOALS: CareerGoal[] = [
   "Creative Career",
 ];
 
-export const GOAL_META: Record<CareerGoal, { icon: string; color: string; bg: string }> = {
-  "Job Search":         { icon: "🔍", color: "#7c3aed", bg: "rgba(124,58,237,0.1)" },
-  "Career Change":      { icon: "🔄", color: "#06b6d4", bg: "rgba(6,182,212,0.1)" },
-  "Relocation":         { icon: "✈️", color: "#f59e0b", bg: "rgba(245,158,11,0.1)" },
-  "Freelance":          { icon: "💼", color: "#10b981", bg: "rgba(16,185,129,0.1)" },
-  "Remote Work":        { icon: "🌐", color: "#8b5cf6", bg: "rgba(139,92,246,0.1)" },
-  "Executive Position": { icon: "🏆", color: "#a78bfa", bg: "rgba(167,139,250,0.1)" },
-  "Tech Career":        { icon: "⚙️", color: "#ec4899", bg: "rgba(236,72,153,0.1)" },
-  "Creative Career":    { icon: "🎨", color: "#f59e0b", bg: "rgba(245,158,11,0.1)" },
+export const GOAL_META: Record<CareerGoal, { color: string; bg: string }> = {
+  "Job Search":         { color: "#7c3aed", bg: "rgba(124,58,237,0.1)" },
+  "Career Change":      { color: "#06b6d4", bg: "rgba(6,182,212,0.1)" },
+  "Relocation":         { color: "#f59e0b", bg: "rgba(245,158,11,0.1)" },
+  "Freelance":          { color: "#10b981", bg: "rgba(16,185,129,0.1)" },
+  "Remote Work":        { color: "#8b5cf6", bg: "rgba(139,92,246,0.1)" },
+  "Executive Position": { color: "#a78bfa", bg: "rgba(167,139,250,0.1)" },
+  "Tech Career":        { color: "#ec4899", bg: "rgba(236,72,153,0.1)" },
+  "Creative Career":    { color: "#f59e0b", bg: "rgba(245,158,11,0.1)" },
 };
 
 export const LANGUAGE_OPTIONS: LanguageOption[] = [

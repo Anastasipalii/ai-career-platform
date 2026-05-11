@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import {
+  Search, RefreshCw, MapPin, Briefcase,
+  Wifi, Award, Code2, Palette,
+} from "lucide-react";
+import {
   LinkedInFormData,
   LinkedInTone,
   CareerGoal,
@@ -11,6 +15,17 @@ import {
   GOAL_META,
   LANGUAGE_OPTIONS,
 } from "@/app/components/linkedin-optimizer/types";
+
+const GOAL_ICONS: Record<CareerGoal, React.ReactNode> = {
+  "Job Search":         <Search size={16} />,
+  "Career Change":      <RefreshCw size={16} />,
+  "Relocation":         <MapPin size={16} />,
+  "Freelance":          <Briefcase size={16} />,
+  "Remote Work":        <Wifi size={16} />,
+  "Executive Position": <Award size={16} />,
+  "Tech Career":        <Code2 size={16} />,
+  "Creative Career":    <Palette size={16} />,
+};
 
 interface LinkedInFormProps {
   formData: LinkedInFormData;
@@ -270,7 +285,12 @@ export default function LinkedInForm({
                     : { background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }
                 }
               >
-                <span className="text-lg leading-none">{meta.icon}</span>
+                <span
+                  className="transition-transform duration-150"
+                  style={{ color: active ? meta.color : "rgba(255,255,255,0.35)" }}
+                >
+                  {GOAL_ICONS[goal]}
+                </span>
                 <span
                   className="text-xs font-medium leading-tight"
                   style={{ color: active ? meta.color : "rgba(255,255,255,0.55)" }}
