@@ -59,6 +59,7 @@ const tools: Tool[] = [
     description:
       "AI scans thousands of live job postings daily and ranks the roles where your profile has the highest fit — filtered by salary, location, and seniority.",
     badge: null,
+    href: "/job-match",
   },
   {
     icon: (

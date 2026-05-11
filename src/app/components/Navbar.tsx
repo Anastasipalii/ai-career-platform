@@ -9,6 +9,7 @@ const navLinks = [
   { label: "LinkedIn", href: "/linkedin-optimizer" },
   { label: "Translate", href: "/resume-translation" },
   { label: "Interview", href: "/interview-coach" },
+  { label: "Job Match", href: "/job-match" },
   { label: "Pricing", href: "#pricing" },
   { label: "About", href: "#about" },
 ];
