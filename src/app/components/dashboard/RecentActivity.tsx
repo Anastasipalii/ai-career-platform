@@ -1,19 +1,10 @@
-import { ReactNode } from "react";
+import { ActivityItem } from "@/app/components/dashboard/DashboardClient";
 
-interface Activity {
-  action: string;
-  detail: string;
-  time: string;
-  color: string;
-  bg: string;
-  icon: ReactNode;
-}
-
-const activities: Activity[] = [
-  {
-    action: "Resume updated",
-    detail: "Product Designer — Vercel",
-    time: "2 hours ago",
+const TYPE_CONFIG: Record<
+  ActivityItem["type"],
+  { color: string; bg: string; icon: React.ReactNode }
+> = {
+  resume: {
     color: "#7c3aed",
     bg: "rgba(124,58,237,0.1)",
     icon: (
@@ -23,10 +14,7 @@ const activities: Activity[] = [
       </svg>
     ),
   },
-  {
-    action: "Cover letter generated",
-    detail: "Stripe · Senior Product Designer",
-    time: "1 day ago",
+  cover_letter: {
     color: "#06b6d4",
     bg: "rgba(6,182,212,0.1)",
     icon: (
@@ -36,10 +24,7 @@ const activities: Activity[] = [
       </svg>
     ),
   },
-  {
-    action: "Interview practice completed",
-    detail: "HR Interview · Score: 88/100",
-    time: "2 days ago",
+  interview: {
     color: "#f59e0b",
     bg: "rgba(245,158,11,0.1)",
     icon: (
@@ -50,48 +35,24 @@ const activities: Activity[] = [
       </svg>
     ),
   },
-  {
-    action: "LinkedIn profile optimised",
-    detail: "Profile strength: 94%",
-    time: "3 days ago",
-    color: "#0a66c2",
-    bg: "rgba(10,102,194,0.1)",
+  job_match: {
+    color: "#8b5cf6",
+    bg: "rgba(139,92,246,0.1)",
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="1" y="1" width="12" height="12" rx="2" />
-        <path d="M4 6.5v4M4 5v.3" />
-        <path d="M7 10.5V8a2 2 0 014 0v2.5M7 8v2.5" />
+        <circle cx="6.5" cy="6.5" r="5" />
+        <path d="M10.5 10.5l3 3" strokeWidth="1.5" />
       </svg>
     ),
   },
-  {
-    action: "Resume translated",
-    detail: "English → German",
-    time: "5 days ago",
-    color: "#10b981",
-    bg: "rgba(16,185,129,0.1)",
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="7" cy="7" r="6" />
-        <path d="M1 7h12M7 1a9 9 0 010 12M7 1a9 9 0 000 12" />
-      </svg>
-    ),
-  },
-  {
-    action: "Career roadmap created",
-    detail: "Senior Designer → Head of Design",
-    time: "1 week ago",
-    color: "#ec4899",
-    bg: "rgba(236,72,153,0.1)",
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="1 11 4 7 7 9 10 4 13 6" />
-      </svg>
-    ),
-  },
-];
+};
 
-export default function RecentActivity() {
+interface RecentActivityProps {
+  activities: ActivityItem[];
+  formatRelative: (iso: string) => string;
+}
+
+export default function RecentActivity({ activities, formatRelative }: RecentActivityProps) {
   return (
     <div
       className="rounded-2xl border overflow-hidden"
@@ -102,40 +63,48 @@ export default function RecentActivity() {
         style={{ borderColor: "rgba(255,255,255,0.07)" }}
       >
         <h2 className="text-sm font-semibold text-white">Recent Activity</h2>
-        <button type="button" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
-          View all
-        </button>
       </div>
-      <div className="p-5">
-        <div className="flex flex-col">
-          {activities.map((act, idx) => (
-            <div key={idx} className="flex items-start gap-3 group">
-              {/* Dot + line */}
-              <div className="flex flex-col items-center shrink-0">
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background: act.bg, color: act.color, border: `1px solid ${act.color}33` }}
-                >
-                  {act.icon}
-                </div>
-                {idx < activities.length - 1 && (
-                  <div className="w-px h-5 my-0.5" style={{ background: "rgba(255,255,255,0.06)" }} />
-                )}
-              </div>
-              {/* Content */}
-              <div className="pb-4 min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium text-white leading-snug">{act.action}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{act.detail}</p>
-                  </div>
-                  <span className="text-[11px] text-slate-600 whitespace-nowrap shrink-0 mt-0.5">{act.time}</span>
-                </div>
-              </div>
-            </div>
-          ))}
+
+      {activities.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 px-5 text-center">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+            style={{ background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.15)" }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#a78bfa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 15 5 9 9 12 13 6 17 8" />
+            </svg>
+          </div>
+          <p className="text-sm font-medium text-slate-400 mb-1">No activity yet</p>
+          <p className="text-xs text-slate-600">Start by creating your first resume.</p>
         </div>
-      </div>
+      ) : (
+        <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+          {activities.map((item) => {
+            const cfg = TYPE_CONFIG[item.type];
+            return (
+              <div
+                key={`${item.type}-${item.id}`}
+                className="flex items-start gap-3 px-5 py-3.5 hover:bg-white/[0.015] transition-colors"
+              >
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                  style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}33` }}
+                >
+                  {cfg.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-slate-300 truncate">{item.action}</p>
+                  <p className="text-xs text-slate-500 truncate mt-0.5">{item.detail}</p>
+                </div>
+                <span className="text-[10px] text-slate-600 shrink-0 mt-0.5 tabular-nums">
+                  {formatRelative(item.timestamp)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
