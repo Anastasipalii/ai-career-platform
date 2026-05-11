@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import DashboardSidebar from "@/app/components/dashboard/DashboardSidebar";
 import DashboardHeader from "@/app/components/dashboard/DashboardHeader";
 import QuickStats from "@/app/components/dashboard/QuickStats";
@@ -14,6 +16,19 @@ import InterviewWidget from "@/app/components/dashboard/InterviewWidget";
 
 export default function DashboardClient() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userEmail, setUserEmail]     = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserEmail(session?.user?.email ?? null);
+    });
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   return (
     <div className="min-h-screen flex" style={{ background: "#05050a" }}>
@@ -23,7 +38,7 @@ export default function DashboardClient() {
         className="hidden lg:flex lg:flex-col lg:w-60 lg:fixed lg:inset-y-0 z-10 border-r"
         style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(9,9,16,0.98)" }}
       >
-        <DashboardSidebar activePath="/dashboard" />
+        <DashboardSidebar activePath="/dashboard" userEmail={userEmail} onLogout={handleLogout} />
       </aside>
 
       {/* ── Mobile sidebar overlay ── */}
@@ -40,6 +55,8 @@ export default function DashboardClient() {
           >
             <DashboardSidebar
               activePath="/dashboard"
+              userEmail={userEmail}
+              onLogout={handleLogout}
               onClose={() => setSidebarOpen(false)}
             />
           </aside>
@@ -51,7 +68,7 @@ export default function DashboardClient() {
         <main className="px-4 sm:px-6 lg:px-8 py-7 max-w-[1400px]">
 
           {/* Header */}
-          <DashboardHeader onMenuClick={() => setSidebarOpen(true)} />
+          <DashboardHeader onMenuClick={() => setSidebarOpen(true)} userEmail={userEmail} />
 
           {/* Quick stats */}
           <QuickStats />

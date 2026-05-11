@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import AuthLayout from "@/app/components/auth/AuthLayout";
+import { supabase } from "@/lib/supabase";
 
 const inputCls =
   "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 transition-all input-glow outline-none";
@@ -22,8 +23,11 @@ export default function ForgotPasswordForm() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError("Enter a valid email address"); return; }
     setError("");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
+    const { error: sbError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login`,
+    });
     setLoading(false);
+    if (sbError) { setError(sbError.message); return; }
     setSent(true);
   };
 

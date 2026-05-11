@@ -2,9 +2,13 @@ import Link from "next/link";
 
 interface DashboardHeaderProps {
   onMenuClick: () => void;
+  userEmail?: string | null;
 }
 
-export default function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
+export default function DashboardHeader({ onMenuClick, userEmail }: DashboardHeaderProps) {
+  const displayName = userEmail
+    ? userEmail.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "there";
   return (
     <div
       className="flex items-start justify-between gap-4 mb-7 pb-6 border-b"
@@ -25,7 +29,7 @@ export default function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
 
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            Welcome back, Emma&nbsp;👋
+            Welcome back, {displayName}&nbsp;👋
           </h1>
           <p className="text-slate-400 text-sm mt-1">
             Track your resumes, AI tools, and career progress in one place.

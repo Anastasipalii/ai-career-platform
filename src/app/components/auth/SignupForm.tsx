@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/app/components/auth/AuthLayout";
+import { supabase } from "@/lib/supabase";
 
 const inputCls =
   "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 transition-all input-glow outline-none";
@@ -70,14 +71,25 @@ export default function SignupForm() {
     if (Object.keys(e).length) { setErrors(e); return; }
     setErrors({});
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
+    const { error } = await supabase.auth.signUp({ email, password });
+    setLoading(false);
+    if (error) {
+      setErrors({ email: error.message });
+      return;
+    }
     router.push("/dashboard");
   };
 
   const handleGoogle = async () => {
     setGoogleLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    router.push("/dashboard");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/dashboard` },
+    });
+    if (error) {
+      setErrors({ email: error.message });
+      setGoogleLoading(false);
+    }
   };
 
   return (

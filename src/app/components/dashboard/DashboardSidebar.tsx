@@ -98,9 +98,16 @@ const NAV_ITEMS: NavItem[] = [
 interface DashboardSidebarProps {
   activePath?: string;
   onClose?: () => void;
+  userEmail?: string | null;
+  onLogout?: () => void;
 }
 
-export default function DashboardSidebar({ activePath = "/dashboard", onClose }: DashboardSidebarProps) {
+export default function DashboardSidebar({
+  activePath = "/dashboard",
+  onClose,
+  userEmail,
+  onLogout,
+}: DashboardSidebarProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Logo + close */}
@@ -181,15 +188,6 @@ export default function DashboardSidebar({ activePath = "/dashboard", onClose }:
               </svg>
             ),
           },
-          {
-            label: "Logout",
-            href: "#",
-            icon: (
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            ),
-          },
         ].map((item) => (
           <Link
             key={item.label}
@@ -203,6 +201,23 @@ export default function DashboardSidebar({ activePath = "/dashboard", onClose }:
             {item.label}
           </Link>
         ))}
+
+        {/* Logout button */}
+        <button
+          type="button"
+          onClick={onLogout}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full text-left transition-colors duration-150"
+          style={{ color: "#475569", border: "1px solid transparent" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#f87171"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#475569"; }}
+        >
+          <span className="shrink-0">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          Logout
+        </button>
       </nav>
 
       {/* User profile */}
@@ -215,11 +230,13 @@ export default function DashboardSidebar({ activePath = "/dashboard", onClose }:
             className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0"
             style={{ background: "linear-gradient(135deg, #7c3aed, #ec4899)", color: "white" }}
           >
-            A
+            {userEmail ? userEmail[0].toUpperCase() : "?"}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">Emma Wilson</p>
-            <p className="text-xs text-slate-500 truncate">emma.wilson@email.com</p>
+            <p className="text-sm font-medium text-white truncate">
+              {userEmail ?? "Loading…"}
+            </p>
+            <p className="text-xs text-slate-500 truncate">{userEmail ?? ""}</p>
           </div>
           <div
             className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0"
