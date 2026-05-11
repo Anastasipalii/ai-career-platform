@@ -8,6 +8,7 @@ import {
   ResumeFormData,
   CustomizationSettings,
   TemplateKey,
+  FontOption,
 } from "@/app/components/resume-builder/types";
 import Toast from "@/app/components/ui/Toast";
 import ResumeHero from "@/app/components/resume-builder/ResumeHero";
@@ -18,8 +19,18 @@ import AIFeaturesPanel from "@/app/components/resume-builder/AIFeaturesPanel";
 import ResumePreview from "@/app/components/resume-builder/ResumePreview";
 import ExportSection from "@/app/components/resume-builder/ExportSection";
 
-// ── Public type used by ExportSection ──────────────────────────────────────
+// ── Public types used by ExportSection ─────────────────────────────────────
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
+export type PdfStatus  = "idle" | "generating";
+
+// ── Print font stacks (no CSS variables — resolved at print time) ───────────
+const PRINT_FONT_STACKS: Record<FontOption, string> = {
+  Minimal:      "system-ui, -apple-system, Arial, sans-serif",
+  Professional: "Georgia, 'Times New Roman', serif",
+  Creative:     "'Trebuchet MS', Optima, Arial, sans-serif",
+  ModernSans:   "'Courier New', Courier, monospace",
+  Elegant:      "Palatino, 'Palatino Linotype', 'Book Antiqua', serif",
+};
 
 // ── Saved resume shape (content is the JSONB blob from Supabase) ───────────
 interface ResumeContent {
@@ -99,6 +110,7 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateKey>("Creative");
   const [resumeId, setResumeId]           = useState<string | null>(null);
   const [saveStatus, setSaveStatus]       = useState<SaveStatus>("idle");
+  const [pdfStatus, setPdfStatus]         = useState<PdfStatus>("idle");
   const [toast, setToast]                 = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [myResumes, setMyResumes]         = useState<SavedResumeRecord[]>([]);
 
@@ -171,16 +183,18 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
       content: { formData, settings } as unknown as Record<string, unknown>,
     };
 
+    const resetErrorAfterDelay = (msg: string) => {
+      setSaveStatus("error");
+      showToast(msg, "error");
+      setTimeout(() => setSaveStatus("idle"), 4000);
+    };
+
     if (resumeId) {
       const { error } = await supabase
         .from("resumes")
         .update(payload)
         .eq("id", resumeId);
-      if (error) {
-        setSaveStatus("error");
-        showToast(`Save failed: ${error.message}`, "error");
-        return;
-      }
+      if (error) { resetErrorAfterDelay(`Save failed: ${error.message}`); return; }
     } else {
       const { data, error } = await supabase
         .from("resumes")
@@ -188,8 +202,7 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
         .select("id")
         .single();
       if (error || !data) {
-        setSaveStatus("error");
-        showToast(error?.message ?? "Save failed.", "error");
+        resetErrorAfterDelay(error?.message ?? "Save failed. Please try again.");
         return;
       }
       setResumeId((data as { id: string }).id);
@@ -201,6 +214,59 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
     setSaveStatus("saved");
     showToast("Resume saved successfully!", "success");
     setTimeout(() => setSaveStatus("idle"), 3000);
+  };
+
+  const handleDownload = () => {
+    const resumeEl = document.getElementById("resume-document");
+    if (!resumeEl) {
+      showToast("Resume preview not found. Please try again.", "error");
+      return;
+    }
+
+    setPdfStatus("generating");
+
+    const fontFamily = PRINT_FONT_STACKS[settings.font];
+    const filename = formData.fullName
+      ? `${formData.fullName.toLowerCase().replace(/\s+/g, "-")}-resume`
+      : "my-resume";
+
+    const printWin = window.open("", "_blank", "width=850,height=1100");
+    if (!printWin) {
+      setPdfStatus("idle");
+      showToast("Popups are blocked. Please allow popups and try again.", "error");
+      return;
+    }
+
+    printWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${filename}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: ${fontFamily}; background: #ffffff; }
+    @page { margin: 0; size: A4 portrait; }
+    @media print {
+      html, body { width: 210mm; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>${resumeEl.innerHTML}</body>
+</html>`);
+
+    printWin.document.close();
+
+    // Give the window time to render before opening the print dialog
+    setTimeout(() => {
+      try {
+        printWin.focus();
+        printWin.print();
+      } catch {
+        // Dialog may have been blocked or window closed by the user
+      }
+      setPdfStatus("idle");
+    }, 700);
   };
 
   const handleDelete = async (id: string) => {
@@ -259,7 +325,9 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
               <ExportSection
                 formData={formData}
                 onSave={handleSave}
+                onDownload={handleDownload}
                 saveStatus={saveStatus}
+                pdfStatus={pdfStatus}
                 isSaved={resumeId !== null}
               />
             </div>

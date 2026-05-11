@@ -587,6 +587,7 @@ export default function ResumePreview({ formData, settings }: ResumePreviewProps
       {/* Resume document */}
       <div style={{ background: "#e5e7eb", padding: "12px", maxHeight: "560px", overflowY: "auto" }}>
         <div
+          id="resume-document"
           style={{
             background: "#ffffff",
             borderRadius: "6px",

@@ -122,17 +122,30 @@ export default function ResumeForm({ formData, onChange }: ResumeFormProps) {
 
   /* ─── Skills ─── */
   const addSkill = () => {
-    const trimmed = skillInput.replace(/,\s*$/, "").trim();
-    if (trimmed && !formData.skills.includes(trimmed)) {
-      setField("skills", [...formData.skills, trimmed]);
+    const parts = skillInput
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const newSkills = parts.filter((s) => !formData.skills.includes(s));
+    if (newSkills.length > 0) {
+      setField("skills", [...formData.skills, ...newSkills]);
     }
     setSkillInput("");
   };
 
   const handleSkillKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === ",") {
+    if (e.key === "Enter") {
       e.preventDefault();
       addSkill();
+    }
+    // Comma immediately commits the current word as a tag
+    if (e.key === ",") {
+      e.preventDefault();
+      const trimmed = skillInput.trim();
+      if (trimmed && !formData.skills.includes(trimmed)) {
+        setField("skills", [...formData.skills, trimmed]);
+      }
+      setSkillInput("");
     }
     if (e.key === "Backspace" && !skillInput && formData.skills.length > 0) {
       setField("skills", formData.skills.slice(0, -1));
@@ -310,7 +323,6 @@ export default function ResumeForm({ formData, onChange }: ResumeFormProps) {
             value={skillInput}
             onChange={(e) => setSkillInput(e.target.value)}
             onKeyDown={handleSkillKey}
-            onBlur={addSkill}
           />
           <button
             type="button"
