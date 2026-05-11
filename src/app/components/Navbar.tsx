@@ -7,6 +7,7 @@ const navLinks = [
   { label: "Resume Builder", href: "/resume-builder" },
   { label: "Cover Letter", href: "/cover-letter" },
   { label: "LinkedIn", href: "/linkedin-optimizer" },
+  { label: "Translate", href: "/resume-translation" },
   { label: "Pricing", href: "#pricing" },
   { label: "About", href: "#about" },
 ];

@@ -120,6 +120,7 @@ const tools: Tool[] = [
     description:
       "Upload an existing resume or PDF and instantly translate it into 30+ languages. Professional formatting and tone are preserved — ready to send without any manual rework.",
     badge: null,
+    href: "/resume-translation",
   },
 ];
 
