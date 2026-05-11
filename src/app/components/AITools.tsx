@@ -91,6 +91,7 @@ const tools: Tool[] = [
     description:
       "Get a personalized, step-by-step career roadmap based on your current skills and target role. Know exactly which skills to learn, roles to pursue, and milestones to hit.",
     badge: null,
+    href: "/career-path",
   },
   {
     icon: (
