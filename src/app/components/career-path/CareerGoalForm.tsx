@@ -71,7 +71,7 @@ export default function CareerGoalForm({ data, onChange, onGenerate, isGeneratin
       {/* Experience Level */}
       <div>
         <label className="block text-xs text-slate-500 mb-2">Experience level</label>
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {EXPERIENCE_LEVELS.map((lvl) => (
             <button
               key={lvl}
@@ -89,7 +89,7 @@ export default function CareerGoalForm({ data, onChange, onGenerate, isGeneratin
       {/* Time Goal */}
       <div>
         <label className="block text-xs text-slate-500 mb-2">Time to reach goal</label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-3 gap-2.5">
           {TIME_GOALS.map((tg) => {
             const active = data.timeGoal === tg;
             return (
@@ -97,11 +97,10 @@ export default function CareerGoalForm({ data, onChange, onGenerate, isGeneratin
                 key={tg}
                 type="button"
                 onClick={() => set("timeGoal", tg as TimeGoal)}
-                className="py-3 rounded-xl text-sm font-semibold text-center transition-all duration-200 hover:opacity-90 flex flex-col items-center gap-0.5"
+                className="py-3 rounded-xl text-sm font-semibold text-center transition-all duration-200 hover:opacity-90"
                 style={active ? pillActive : pillBase}
               >
-                <span>{tg.split(" ")[0]}</span>
-                <span className="text-[10px] font-normal opacity-70">months</span>
+                {tg}
               </button>
             );
           })}

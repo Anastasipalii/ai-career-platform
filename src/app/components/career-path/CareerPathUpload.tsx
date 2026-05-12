@@ -31,21 +31,11 @@ export default function CareerPathUpload({ fileName, onFileChange }: CareerPathU
         boxShadow: dragging ? "0 0 32px rgba(236,72,153,0.12)" : "none",
       }}
     >
-      <div className="flex items-center gap-2.5 mb-3">
+      <div className="flex items-center gap-2.5 mb-4">
         <div className="w-1 h-5 rounded-full shrink-0" style={{ background: "#ec4899" }} />
         <h3 className="text-white font-semibold text-base">Upload Your Resume</h3>
-        <span
-          className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0"
-          style={{ background: "rgba(236,72,153,0.12)", color: "#fbcfe8", border: "1px solid rgba(236,72,153,0.25)" }}
-        >
-          Optional
-        </span>
+        <span className="text-xs text-slate-600 ml-auto">Optional — improves task relevance</span>
       </div>
-
-      <p className="text-sm text-slate-400 mb-5 leading-relaxed">
-        AI will analyse your experience and skills to create a personalised
-        career plan tailored to where you are right now.
-      </p>
 
       <label
         htmlFor="cp-resume-upload"

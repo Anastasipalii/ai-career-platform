@@ -1,6 +1,6 @@
 export type WorkStyle = "Remote" | "Hybrid" | "On-site";
-export type ExperienceLevel = "Student" | "Junior" | "Mid-level" | "Senior" | "Lead";
-export type TimeGoal = "3 months" | "6 months" | "12 months" | "24 months";
+export type ExperienceLevel = "Junior" | "Mid-level" | "Senior";
+export type TimeGoal = "3 months" | "6 months" | "12 months";
 
 export interface CareerGoalData {
   currentTitle: string;
@@ -23,13 +23,9 @@ export interface RoadmapPhase {
 
 export const WORK_STYLES: WorkStyle[] = ["Remote", "Hybrid", "On-site"];
 
-export const EXPERIENCE_LEVELS: ExperienceLevel[] = [
-  "Student", "Junior", "Mid-level", "Senior", "Lead",
-];
+export const EXPERIENCE_LEVELS: ExperienceLevel[] = ["Junior", "Mid-level", "Senior"];
 
-export const TIME_GOALS: TimeGoal[] = [
-  "3 months", "6 months", "12 months", "24 months",
-];
+export const TIME_GOALS: TimeGoal[] = ["3 months", "6 months", "12 months"];
 
 export const INDUSTRIES: string[] = [
   "Technology", "Finance & Banking", "Healthcare", "Product & Design",
