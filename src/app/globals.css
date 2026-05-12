@@ -56,6 +56,35 @@ body {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06) 30%, rgba(255, 255, 255, 0.06) 70%, transparent);
 }
 
+/* Shared informational feature card — passive, no pointer, subtle hover only */
+.feature-card {
+  position: relative;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(13, 13, 22, 0.6);
+  transition: border-color 0.3s, transform 0.3s;
+  cursor: default;
+}
+
+.feature-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.feature-card-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.feature-card:hover .feature-card-glow {
+  opacity: 1;
+}
+
 /* Resume builder form input focus glow */
 .input-glow:focus {
   border-color: rgba(124, 58, 237, 0.5);

@@ -389,12 +389,9 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
 
             {/* ATS-Friendly */}
-            <div
-              className="group relative rounded-2xl p-5 border text-left transition-all duration-300 hover:border-white/20 hover:-translate-y-0.5 cursor-default"
-              style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-            >
+            <div className="feature-card">
               <div
-                className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                className="feature-card-glow"
                 style={{ background: "radial-gradient(circle at 50% 0%, rgba(124,58,237,0.1) 0%, transparent 55%)" }}
               />
               <div
@@ -413,12 +410,9 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
             </div>
 
             {/* Multiple Languages */}
-            <div
-              className="group relative rounded-2xl p-5 border text-left transition-all duration-300 hover:border-white/20 hover:-translate-y-0.5 cursor-default"
-              style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-            >
+            <div className="feature-card">
               <div
-                className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                className="feature-card-glow"
                 style={{ background: "radial-gradient(circle at 50% 0%, rgba(16,185,129,0.1) 0%, transparent 55%)" }}
               />
               <div
@@ -438,12 +432,9 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
             </div>
 
             {/* One-Click Export */}
-            <div
-              className="group relative rounded-2xl p-5 border text-left transition-all duration-300 hover:border-white/20 hover:-translate-y-0.5 cursor-default"
-              style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-            >
+            <div className="feature-card">
               <div
-                className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                className="feature-card-glow"
                 style={{ background: "radial-gradient(circle at 50% 0%, rgba(6,182,212,0.1) 0%, transparent 55%)" }}
               />
               <div

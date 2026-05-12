@@ -72,13 +72,9 @@ export default function AIInsightsPanel() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {insights.map((ins) => (
-            <div
-              key={ins.title}
-              className="group relative rounded-2xl p-5 border transition-all duration-300 hover:border-white/20 hover:-translate-y-0.5 cursor-default"
-              style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-            >
+            <div key={ins.title} className="feature-card">
               <div
-                className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                className="feature-card-glow"
                 style={{ background: `radial-gradient(circle at 50% 0%, ${ins.bg} 0%, transparent 55%)` }}
               />
               <div className="flex items-start justify-between gap-2 mb-4">

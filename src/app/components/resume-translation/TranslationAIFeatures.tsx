@@ -72,13 +72,9 @@ export default function TranslationAIFeatures() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {features.map((feat) => (
-            <div
-              key={feat.title}
-              className="group relative rounded-2xl p-5 border transition-all duration-300 hover:border-white/20 hover:-translate-y-0.5"
-              style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-            >
+            <div key={feat.title} className="feature-card">
               <div
-                className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                className="feature-card-glow"
                 style={{ background: `radial-gradient(circle at 50% 0%, ${feat.bg} 0%, transparent 55%)` }}
               />
               <div
