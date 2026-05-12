@@ -7,8 +7,6 @@ export interface JobPreferencesData {
   location: string;
   workType: WorkType;
   employmentType: EmploymentType;
-  salary: string;
-  industry: string;
   seniority: SeniorityLevel;
   language: string;
 }
@@ -31,22 +29,9 @@ export const WORK_TYPES: WorkType[] = ["Remote", "Hybrid", "On-site"];
 export const EMPLOYMENT_TYPES: EmploymentType[] = ["Full-time", "Part-time", "Internship", "Freelance"];
 export const SENIORITY_LEVELS: SeniorityLevel[] = ["Intern", "Junior", "Mid-level", "Senior", "Lead"];
 
-export const INDUSTRIES: string[] = [
-  "Technology",
-  "Finance & Banking",
-  "Healthcare",
-  "Product & Design",
-  "Marketing & Growth",
-  "Sales",
-  "Consulting",
-  "Education",
-  "E-Commerce",
-  "AI & Machine Learning",
-];
-
 export const LANGUAGES: string[] = [
   "English (US)", "English (UK)", "German", "Ukrainian",
-  "Russian", "Polish", "Spanish", "Italian", "French", "Portuguese",
+  "Russian", "Polish", "Spanish", "Italian", "French", "Portuguese", "Arabic",
 ];
 
 export const MOCK_JOBS: JobMatch[] = [

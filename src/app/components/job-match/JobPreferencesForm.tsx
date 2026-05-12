@@ -6,7 +6,6 @@ import {
   WORK_TYPES,
   EMPLOYMENT_TYPES,
   SENIORITY_LEVELS,
-  INDUSTRIES,
   LANGUAGES,
 } from "@/app/components/job-match/types";
 
@@ -32,21 +31,6 @@ const pillActive: React.CSSProperties = {
   color: "white",
 };
 
-function Section({ title, color, children }: { title: string; color: string; children: React.ReactNode }) {
-  return (
-    <div
-      className="rounded-2xl p-6 border"
-      style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-    >
-      <div className="flex items-center gap-2.5 mb-5">
-        <div className="w-1 h-5 rounded-full shrink-0" style={{ background: color }} />
-        <h3 className="text-white font-semibold text-base">{title}</h3>
-      </div>
-      {children}
-    </div>
-  );
-}
-
 export default function JobPreferencesForm({
   data,
   onChange,
@@ -57,62 +41,35 @@ export default function JobPreferencesForm({
     onChange({ ...data, [key]: value });
 
   return (
-    <div className="flex flex-col gap-5">
-
-      {/* ── Target Role & Location ── */}
-      <Section title="Target Role" color="#8b5cf6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5">Job title</label>
-            <input
-              className={inputCls}
-              placeholder="Senior Product Designer"
-              value={data.jobTitle}
-              onChange={(e) => set("jobTitle", e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5">Preferred location</label>
-            <input
-              className={inputCls}
-              placeholder="San Francisco, CA or Remote"
-              value={data.location}
-              onChange={(e) => set("location", e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5">Preferred industry</label>
-            <div className="relative">
-              <select
-                className={inputCls + " appearance-none cursor-pointer pr-9"}
-                value={data.industry}
-                onChange={(e) => set("industry", e.target.value)}
-              >
-                {INDUSTRIES.map((ind) => (
-                  <option key={ind} value={ind}>{ind}</option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5">Salary expectation</label>
-            <input
-              className={inputCls}
-              placeholder="e.g. $120k – $160k"
-              value={data.salary}
-              onChange={(e) => set("salary", e.target.value)}
-            />
-          </div>
+    <div
+      className="rounded-2xl border flex flex-col gap-6 p-6"
+      style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
+    >
+      {/* Role + Location */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs text-slate-500 mb-1.5">Desired role</label>
+          <input
+            className={inputCls}
+            placeholder="Senior Product Designer"
+            value={data.jobTitle}
+            onChange={(e) => set("jobTitle", e.target.value)}
+          />
         </div>
-      </Section>
+        <div>
+          <label className="block text-xs text-slate-500 mb-1.5">Preferred location</label>
+          <input
+            className={inputCls}
+            placeholder="San Francisco, CA or Remote"
+            value={data.location}
+            onChange={(e) => set("location", e.target.value)}
+          />
+        </div>
+      </div>
 
-      {/* ── Work Type ── */}
-      <Section title="Work Type" color="#06b6d4">
+      {/* Work Type */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-3">Work type</label>
         <div className="grid grid-cols-3 gap-2.5">
           {WORK_TYPES.map((wt) => (
             <button
@@ -126,10 +83,11 @@ export default function JobPreferencesForm({
             </button>
           ))}
         </div>
-      </Section>
+      </div>
 
-      {/* ── Employment Type ── */}
-      <Section title="Employment Type" color="#10b981">
+      {/* Employment Type */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-3">Employment type</label>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           {EMPLOYMENT_TYPES.map((et) => (
             <button
@@ -143,10 +101,11 @@ export default function JobPreferencesForm({
             </button>
           ))}
         </div>
-      </Section>
+      </div>
 
-      {/* ── Seniority Level ── */}
-      <Section title="Seniority Level" color="#f59e0b">
+      {/* Seniority Level */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-3">Seniority level</label>
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {SENIORITY_LEVELS.map((level) => (
             <button
@@ -160,13 +119,11 @@ export default function JobPreferencesForm({
             </button>
           ))}
         </div>
-      </Section>
+      </div>
 
-      {/* ── Language ── */}
-      <Section title="Results Language" color="#ec4899">
-        <label className="block text-xs text-slate-500 mb-1.5">
-          Job descriptions and AI insights will be shown in this language
-        </label>
+      {/* Results Language */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1.5">Results language</label>
         <div className="relative">
           <select
             className={inputCls + " appearance-none cursor-pointer pr-9"}
@@ -183,9 +140,9 @@ export default function JobPreferencesForm({
             </svg>
           </div>
         </div>
-      </Section>
+      </div>
 
-      {/* ── Search button ── */}
+      {/* Search button */}
       <button
         type="button"
         onClick={onSearch}

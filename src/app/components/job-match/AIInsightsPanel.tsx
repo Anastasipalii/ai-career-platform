@@ -43,82 +43,34 @@ const insights: Insight[] = [
         <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
       </svg>
     ),
-    title: "Resume Tips",
+    title: "Resume Improvements",
     body: "Add quantified metrics to 3 more bullet points. Recruiters spend 6 seconds on first scan — your top achievement should appear above the fold.",
     color: "#06b6d4",
     bg: "rgba(6,182,212,0.1)",
     border: "rgba(6,182,212,0.2)",
   },
-  {
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 21l-4.35-4.35" /><circle cx="11" cy="11" r="8" />
-        <path d="M8 11h6M11 8v6" />
-      </svg>
-    ),
-    title: "Keyword Suggestions",
-    body: "Add to your resume: \"AI interface design\", \"cross-functional leadership\", \"design systems at scale\", \"data-informed UX\" — these appear in 80% of target roles.",
-    color: "#10b981",
-    bg: "rgba(16,185,129,0.1)",
-    border: "rgba(16,185,129,0.2)",
-  },
-  {
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" />
-      </svg>
-    ),
-    title: "Market Demand",
-    body: "Senior Product Designer roles are up 23% this quarter. AI-focused design positions have grown 41% YoY — your AI/ML experience is a strong differentiator.",
-    color: "#ec4899",
-    bg: "rgba(236,72,153,0.1)",
-    border: "rgba(236,72,153,0.2)",
-    tag: "Trending",
-  },
-  {
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="12" y1="1" x2="12" y2="23" />
-        <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-      </svg>
-    ),
-    title: "Salary Insights",
-    body: "For Senior Product Designer in San Francisco: $140k–$195k base. Remote roles offer $120k–$175k. With your experience level, aim for the top 30% of the range.",
-    color: "#a78bfa",
-    bg: "rgba(167,139,250,0.1)",
-    border: "rgba(167,139,250,0.2)",
-  },
 ];
 
 export default function AIInsightsPanel() {
   return (
-    <section className="py-24 relative">
+    <section className="py-20 relative">
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] rounded-full pointer-events-none"
-        style={{ background: "radial-gradient(ellipse, rgba(139,92,246,0.05) 0%, transparent 70%)" }}
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] rounded-full pointer-events-none"
+        style={{ background: "radial-gradient(ellipse, rgba(139,92,246,0.04) 0%, transparent 70%)" }}
       />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-14">
-          <div
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border mb-5"
-            style={{ borderColor: "rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.08)" }}
-          >
-            <span className="text-xs font-medium tracking-wide uppercase" style={{ color: "#c4b5fd" }}>
-              AI insights
-            </span>
-          </div>
-          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3">
             Understand your{" "}
             <span className="gradient-text">job market position</span>
           </h2>
-          <p className="text-slate-400 text-base max-w-xl mx-auto leading-relaxed">
-            Six AI-powered insights that show exactly where you stand and what
-            to do next to accelerate your job search.
+          <p className="text-slate-400 text-sm max-w-lg mx-auto">
+            Three AI-powered insights that show exactly where you stand and what to do next.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {insights.map((ins) => (
             <div
               key={ins.title}
