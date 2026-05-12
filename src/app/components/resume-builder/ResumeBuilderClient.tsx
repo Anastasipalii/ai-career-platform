@@ -358,6 +358,83 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
           />
         </>
       )}
+
+      {/* ── Built-in features ── */}
+      <div className="section-divider" />
+      <section className="py-20">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+
+            {/* ATS-Friendly */}
+            <div
+              className="group rounded-2xl p-8 border flex flex-col gap-5 transition-all duration-300 hover:border-white/15 hover:-translate-y-0.5"
+              style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
+            >
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                style={{ background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.2)", color: "#a78bfa" }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-base mb-2">ATS-Friendly</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Optimize your resume for recruiter systems and automated screenings.
+                </p>
+              </div>
+            </div>
+
+            {/* Multiple Languages */}
+            <div
+              className="group rounded-2xl p-8 border flex flex-col gap-5 transition-all duration-300 hover:border-white/15 hover:-translate-y-0.5"
+              style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
+            >
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", color: "#34d399" }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-base mb-2">Multiple Languages</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Create resumes in multiple languages including Arabic.
+                </p>
+              </div>
+            </div>
+
+            {/* One-Click Export */}
+            <div
+              className="group rounded-2xl p-8 border flex flex-col gap-5 transition-all duration-300 hover:border-white/15 hover:-translate-y-0.5"
+              style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
+            >
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                style={{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.2)", color: "#67e8f9" }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2v13M8 11l4 4 4-4" />
+                  <path d="M20 17v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-base mb-2">One-Click Export</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Download clean PDF resumes instantly or save them to your dashboard.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
     </>
   );
 }
