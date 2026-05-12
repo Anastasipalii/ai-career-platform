@@ -3,6 +3,9 @@ import { LinkedInFormData, LinkedInTone } from "@/app/components/linkedin-optimi
 interface LinkedInPreviewProps {
   formData: LinkedInFormData;
   optimized: boolean;
+  aiHeadline?: string;
+  aiAbout?: string;
+  aiSkills?: string[];
 }
 
 const TONE_HEADLINES: Record<LinkedInTone, string> = {
@@ -58,14 +61,14 @@ function Avatar({ name }: { name: string }) {
   );
 }
 
-export default function LinkedInPreview({ formData, optimized }: LinkedInPreviewProps) {
+export default function LinkedInPreview({ formData, optimized, aiHeadline, aiAbout, aiSkills }: LinkedInPreviewProps) {
   const name     = formData.fullName    || "Alexandra Chen";
   const role     = formData.currentRole || "Senior Product Designer";
-  const headline = optimized ? TONE_HEADLINES[formData.tone] : (formData.headline || TONE_HEADLINES["Professional"]);
-  const about    = optimized ? TONE_ABOUT[formData.tone]    : (formData.about    || TONE_ABOUT["Professional"]);
-  const skills   = formData.skills
+  const headline = aiHeadline ?? (optimized ? TONE_HEADLINES[formData.tone] : (formData.headline || TONE_HEADLINES["Professional"]));
+  const about    = aiAbout    ?? (optimized ? TONE_ABOUT[formData.tone]    : (formData.about    || TONE_ABOUT["Professional"]));
+  const skills   = aiSkills   ?? (formData.skills
     ? formData.skills.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 8)
-    : SAMPLE_SKILLS;
+    : SAMPLE_SKILLS);
 
   const expLines = formData.experience
     ? formData.experience.split("\n").filter(Boolean)

@@ -4,9 +4,11 @@ import { useState } from "react";
 
 interface CareerPathActionsProps {
   hasRoadmap: boolean;
+  saveStatus?: "idle" | "saving" | "saved";
+  onSave?: () => void;
 }
 
-export default function CareerPathActions({ hasRoadmap }: CareerPathActionsProps) {
+export default function CareerPathActions({ hasRoadmap, saveStatus = "idle", onSave }: CareerPathActionsProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -24,19 +26,21 @@ export default function CareerPathActions({ hasRoadmap }: CareerPathActionsProps
         {/* Save roadmap */}
         <button
           type="button"
-          disabled={!hasRoadmap}
+          disabled={!hasRoadmap || saveStatus === "saving"}
+          onClick={onSave}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100"
           style={{
-            background: "linear-gradient(135deg, #be185d, #ec4899)",
-            boxShadow: hasRoadmap ? "0 0 24px rgba(236,72,153,0.3)" : "none",
+            background: saveStatus === "saved" ? "rgba(16,185,129,0.15)" : "linear-gradient(135deg, #be185d, #ec4899)",
+            boxShadow:  hasRoadmap && saveStatus !== "saved" ? "0 0 24px rgba(236,72,153,0.3)" : "none",
           }}
         >
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-            <path d="M2 2h8.5L13 4.5V13H2V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-            <rect x="4" y="8.5" width="7" height="4.5" rx="0.5" stroke="currentColor" strokeWidth="1.25" />
-            <rect x="4.5" y="2" width="5" height="3.5" rx="0.5" stroke="currentColor" strokeWidth="1.25" />
-          </svg>
-          Save Roadmap
+          {saveStatus === "saving" ? (
+            <><svg className="animate-spin" width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="6" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" /><path d="M7.5 1.5a6 6 0 016 6" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>Saving…</>
+          ) : saveStatus === "saved" ? (
+            <><svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2.5 7.5l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" /></svg>Saved!</>
+          ) : (
+            <><svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 2h8.5L13 4.5V13H2V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /><rect x="4" y="8.5" width="7" height="4.5" rx="0.5" stroke="currentColor" strokeWidth="1.25" /><rect x="4.5" y="2" width="5" height="3.5" rx="0.5" stroke="currentColor" strokeWidth="1.25" /></svg>Save Roadmap</>
+          )}
         </button>
 
         {/* Export PDF */}

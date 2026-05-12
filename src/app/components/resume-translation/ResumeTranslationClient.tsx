@@ -1,13 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import { TranslationFormState } from "@/app/components/resume-translation/types";
+import Toast from "@/app/components/ui/Toast";
 import TranslationHero from "@/app/components/resume-translation/TranslationHero";
 import TranslationUpload from "@/app/components/resume-translation/TranslationUpload";
 import TranslationControls from "@/app/components/resume-translation/TranslationControls";
 import TranslationPreview from "@/app/components/resume-translation/TranslationPreview";
 import TranslationExport from "@/app/components/resume-translation/TranslationExport";
 import TranslationAIFeatures from "@/app/components/resume-translation/TranslationAIFeatures";
+
+// Sample resume text used when no file is uploaded
+const SAMPLE_RESUME_TEXT = `Senior Product Designer with 6+ years of experience building AI-powered digital products at scale. Led design systems and zero-to-one products at Vercel and Linear, driving measurable improvements in user onboarding and engagement.
+
+Experience:
+Senior Product Designer at Vercel (Mar 2022–Present)
+- Led redesign of developer dashboard, improving onboarding by 40%
+- Built design system used across 12 product surfaces
+- Drove 34% increase in deployment success rate through UX improvements
+
+Product Designer at Linear (Jun 2020–Feb 2022)
+- Designed core issue tracking and project management workflows
+- Reduced onboarding time by 40% through progressive disclosure redesign
+- Collaborated with engineering on React component library
+
+Education: Bachelor of Arts, Cognitive Science & HCI — UC Berkeley, 2016–2020
+Skills: Figma, UX Research, Design Systems, Prototyping, React, A/B Testing`;
 
 const INITIAL_STATE: TranslationFormState = {
   sourceLanguage: "English (US)",
@@ -17,34 +37,109 @@ const INITIAL_STATE: TranslationFormState = {
 };
 
 export default function ResumeTranslationClient() {
-  const [state, setState]           = useState<TranslationFormState>(INITIAL_STATE);
-  const [translated, setTranslated] = useState(false);
+  const router = useRouter();
+  const [state, setState]               = useState<TranslationFormState>(INITIAL_STATE);
+  const [translated, setTranslated]     = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [aiTranslation, setAiTranslation] = useState<string>("");
+  const [saveStatus, setSaveStatus]     = useState<"idle" | "saving" | "saved">("idle");
+  const [toast, setToast]               = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const handleTranslate = () => {
-    if (state.sourceLanguage === state.targetLanguage) return;
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  const handleTranslate = async () => {
+    if (state.sourceLanguage === state.targetLanguage) {
+      showToast("Source and target languages must be different.", "error");
+      return;
+    }
+
     setIsTranslating(true);
     setTranslated(false);
-    setTimeout(() => {
-      setIsTranslating(false);
+    setAiTranslation("");
+
+    try {
+      const res = await fetch("/api/resume/improve", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          action:         "translate",
+          text:           SAMPLE_RESUME_TEXT,
+          context:        "professional resume",
+          targetLanguage: state.targetLanguage,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string };
+        throw new Error(err.error ?? "Translation failed.");
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response stream.");
+      const decoder = new TextDecoder();
+      let accumulated = "";
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        accumulated += decoder.decode(value, { stream: true });
+        setAiTranslation(accumulated);
+      }
+
       setTranslated(true);
-    }, 2200);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Translation failed. Please try again.", "error");
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   const handleStateChange = (next: TranslationFormState) => {
     setState(next);
-    // Reset translated state if languages change
     if (next.sourceLanguage !== state.sourceLanguage || next.targetLanguage !== state.targetLanguage) {
       setTranslated(false);
+      setAiTranslation("");
+    }
+  };
+
+  const handleSave = async () => {
+    if (!translated || !aiTranslation.trim()) {
+      showToast("Translate your resume first.", "error");
+      return;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.push("/login"); return; }
+
+    setSaveStatus("saving");
+    const { error } = await supabase.from("translations").insert({
+      user_id:            session.user.id,
+      source_language:    state.sourceLanguage,
+      target_language:    state.targetLanguage,
+      original_content:   SAMPLE_RESUME_TEXT,
+      translated_content: aiTranslation,
+    });
+
+    if (error) {
+      setSaveStatus("idle");
+      showToast(`Save failed: ${error.message}`, "error");
+    } else {
+      setSaveStatus("saved");
+      showToast("Translation saved to your dashboard!", "success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
     }
   };
 
   return (
     <>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <TranslationHero />
       <div className="section-divider" />
 
-      {/* ── Main translator ── */}
       <section id="translator" className="py-16 relative">
         <div
           className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full pointer-events-none"
@@ -52,7 +147,6 @@ export default function ResumeTranslationClient() {
         />
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Section label */}
           <div className="flex items-center gap-3 mb-8">
             <div className="section-divider flex-1" />
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
@@ -62,7 +156,6 @@ export default function ResumeTranslationClient() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
-            {/* Left — upload + controls */}
             <div className="flex flex-col gap-5">
               <TranslationUpload
                 fileName={state.fileName}
@@ -77,10 +170,15 @@ export default function ResumeTranslationClient() {
               />
             </div>
 
-            {/* Right — sticky preview + export */}
             <div className="lg:sticky lg:top-24 self-start flex flex-col gap-5">
-              <TranslationPreview state={state} translated={translated} />
-              <TranslationExport state={state} translated={translated} />
+              <TranslationPreview state={state} translated={translated} aiTranslation={aiTranslation} />
+              <TranslationExport
+                state={state}
+                translated={translated}
+                saveStatus={saveStatus}
+                onSave={handleSave}
+                translatedContent={aiTranslation}
+              />
 
               {translated && (
                 <p className="text-xs text-slate-600 text-center -mt-1">
@@ -104,7 +202,6 @@ export default function ResumeTranslationClient() {
       <TranslationAIFeatures />
       <div className="section-divider" />
 
-      {/* ── Bottom CTA ── */}
       <section className="py-20 relative overflow-hidden">
         <div
           className="absolute inset-0 pointer-events-none"
@@ -115,8 +212,7 @@ export default function ResumeTranslationClient() {
             Apply globally, not just locally
           </h2>
           <p className="text-slate-400 mb-8 max-w-md mx-auto">
-            Join 50,000+ job seekers using CareerAI to expand their career
-            opportunities across borders.
+            Join 50,000+ job seekers using CareerAI to expand their career opportunities across borders.
           </p>
           <button
             type="button"
@@ -124,7 +220,7 @@ export default function ResumeTranslationClient() {
             className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-white transition-all duration-200 hover:scale-[1.03]"
             style={{
               background: "linear-gradient(135deg, #059669, #7c3aed)",
-              boxShadow: "0 0 40px rgba(5,150,105,0.35)",
+              boxShadow:  "0 0 40px rgba(5,150,105,0.35)",
             }}
           >
             Translate My Resume Now

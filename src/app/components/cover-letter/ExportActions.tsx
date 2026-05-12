@@ -5,9 +5,20 @@ import { useState } from "react";
 interface ExportActionsProps {
   name: string;
   generated: boolean;
+  saveStatus?: "idle" | "saving" | "saved";
+  onSave?: () => void;
+  onCopy?: () => void;
+  onDownload?: () => void;
 }
 
-export default function ExportActions({ name, generated }: ExportActionsProps) {
+export default function ExportActions({
+  name,
+  generated,
+  saveStatus = "idle",
+  onSave,
+  onCopy,
+  onDownload,
+}: ExportActionsProps) {
   const [copied, setCopied] = useState(false);
 
   const filename = name
@@ -15,6 +26,7 @@ export default function ExportActions({ name, generated }: ExportActionsProps) {
     : "cover-letter";
 
   const handleCopy = () => {
+    onCopy?.();
     setCopied(true);
     setTimeout(() => setCopied(false), 2200);
   };
@@ -24,19 +36,19 @@ export default function ExportActions({ name, generated }: ExportActionsProps) {
       className="rounded-2xl p-5 border"
       style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
     >
-      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-4">
-        Export
-      </p>
+      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-4">Export</p>
+
       <div className="flex flex-col gap-2.5">
         {/* Download PDF */}
         <button
           type="button"
           disabled={!generated}
+          onClick={onDownload}
           title={`Download ${filename}.pdf`}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100"
           style={{
-            background: "linear-gradient(135deg, #7c3aed, #06b6d4)",
-            boxShadow: generated ? "0 0 24px rgba(124,58,237,0.3)" : "none",
+            background:  "linear-gradient(135deg, #7c3aed, #06b6d4)",
+            boxShadow:   generated ? "0 0 24px rgba(124,58,237,0.3)" : "none",
           }}
         >
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -53,8 +65,8 @@ export default function ExportActions({ name, generated }: ExportActionsProps) {
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all duration-200 hover:border-white/20 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
             background: "rgba(255,255,255,0.05)",
-            border: "1px solid rgba(255,255,255,0.09)",
-            color: copied ? "#6ee7b7" : "rgba(255,255,255,0.75)",
+            border:     "1px solid rgba(255,255,255,0.09)",
+            color:      copied ? "#6ee7b7" : "rgba(255,255,255,0.75)",
           }}
         >
           {copied ? (
@@ -78,20 +90,40 @@ export default function ExportActions({ name, generated }: ExportActionsProps) {
         {/* Save */}
         <button
           type="button"
-          disabled={!generated}
+          disabled={!generated || saveStatus === "saving"}
+          onClick={onSave}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all duration-200 hover:border-white/20 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            color: "rgba(255,255,255,0.5)",
+            background: saveStatus === "saved" ? "rgba(16,185,129,0.08)"     : "rgba(255,255,255,0.03)",
+            border:     saveStatus === "saved" ? "1px solid rgba(16,185,129,0.2)" : "1px solid rgba(255,255,255,0.07)",
+            color:      saveStatus === "saved" ? "#6ee7b7" : "rgba(255,255,255,0.5)",
           }}
         >
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-            <path d="M2 2h8.5L13 4.5V13H2V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-            <rect x="4" y="8.5" width="7" height="4.5" rx="0.5" stroke="currentColor" strokeWidth="1.25" />
-            <rect x="4.5" y="2" width="5" height="3.5" rx="0.5" stroke="currentColor" strokeWidth="1.25" />
-          </svg>
-          Save Cover Letter
+          {saveStatus === "saving" ? (
+            <>
+              <svg className="animate-spin" width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <circle cx="7.5" cy="7.5" r="6" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
+                <path d="M7.5 1.5a6 6 0 016 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              Saving…
+            </>
+          ) : saveStatus === "saved" ? (
+            <>
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <path d="M2.5 7.5l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Saved!
+            </>
+          ) : (
+            <>
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <path d="M2 2h8.5L13 4.5V13H2V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                <rect x="4" y="8.5" width="7" height="4.5" rx="0.5" stroke="currentColor" strokeWidth="1.25" />
+                <rect x="4.5" y="2" width="5" height="3.5" rx="0.5" stroke="currentColor" strokeWidth="1.25" />
+              </svg>
+              Save Cover Letter
+            </>
+          )}
         </button>
       </div>
 

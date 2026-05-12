@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { JobPreferencesData } from "@/app/components/job-match/types";
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { JobPreferencesData, JobMatch } from "@/app/components/job-match/types";
+import Toast from "@/app/components/ui/Toast";
 import JobMatchHero from "@/app/components/job-match/JobMatchHero";
 import JobMatchUpload from "@/app/components/job-match/JobMatchUpload";
 import JobPreferencesForm from "@/app/components/job-match/JobPreferencesForm";
@@ -11,37 +14,90 @@ import AIInsightsPanel from "@/app/components/job-match/AIInsightsPanel";
 import SkillsGap from "@/app/components/job-match/SkillsGap";
 
 const INITIAL_PREFS: JobPreferencesData = {
-  jobTitle:       "Senior Product Designer",
-  location:       "San Francisco, CA",
+  jobTitle:       "",
+  location:       "",
   workType:       "Remote",
   employmentType: "Full-time",
-  salary:         "$140k – $180k",
+  salary:         "",
   industry:       "Technology",
   seniority:      "Senior",
   language:       "English (US)",
 };
 
 export default function JobMatchClient() {
-  const [prefs, setPrefs]       = useState<JobPreferencesData>(INITIAL_PREFS);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [matched, setMatched]   = useState(false);
+  const router = useRouter();
+  const [prefs, setPrefs]           = useState<JobPreferencesData>(INITIAL_PREFS);
+  const [fileName, setFileName]     = useState<string | null>(null);
+  const [matched, setMatched]       = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [aiJobs, setAiJobs]         = useState<JobMatch[]>([]);
+  const [toast, setToast]           = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const handleSearch = () => {
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  const handleSearch = async () => {
+    if (!prefs.jobTitle.trim()) {
+      showToast("Please enter a target job title.", "error");
+      return;
+    }
+
     setIsSearching(true);
     setMatched(false);
-    setTimeout(() => {
-      setIsSearching(false);
+    setAiJobs([]);
+
+    try {
+      const res = await fetch("/api/job-match/analyze", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(prefs),
+      });
+
+      const data = await res.json() as { jobs?: JobMatch[]; error?: string };
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? "Job match analysis failed.");
+      }
+
+      const jobs: JobMatch[] = (data.jobs ?? []).map((j, i) => ({ ...j, id: j.id ?? i + 1 }));
+      setAiJobs(jobs);
       setMatched(true);
-    }, 2000);
+
+      // Save top results to Supabase (fire-and-forget)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        for (const job of jobs.slice(0, 3)) {
+          await supabase.from("job_matches").insert({
+            user_id:              session.user.id,
+            job_title:            job.title,
+            company_name:         job.company,
+            match_score:          job.matchScore,
+            missing_skills:       job.missingSkills,
+            recommended_keywords: job.requiredSkills,
+          });
+        }
+      }
+
+      showToast(`Found ${jobs.length} matching roles!`, "success");
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Job match failed. Please try again.",
+        "error"
+      );
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   return (
     <>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <JobMatchHero />
       <div className="section-divider" />
 
-      {/* ── Main matcher ── */}
       <section id="matcher" className="py-16 relative">
         <div
           className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full pointer-events-none"
@@ -49,7 +105,6 @@ export default function JobMatchClient() {
         />
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Section label */}
           <div className="flex items-center gap-3 mb-8">
             <div className="section-divider flex-1" />
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
@@ -59,7 +114,6 @@ export default function JobMatchClient() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
-            {/* Left — upload + preferences */}
             <div className="flex flex-col gap-5">
               <JobMatchUpload fileName={fileName} onFileChange={setFileName} />
               <JobPreferencesForm
@@ -70,12 +124,12 @@ export default function JobMatchClient() {
               />
             </div>
 
-            {/* Right — sticky: results + actions */}
             <div className="lg:sticky lg:top-24 self-start flex flex-col gap-5">
               <JobMatchResults
                 matched={matched}
                 isSearching={isSearching}
                 onSearch={handleSearch}
+                aiJobs={aiJobs}
               />
               <JobMatchActions hasResults={matched} />
 
@@ -103,7 +157,6 @@ export default function JobMatchClient() {
       <SkillsGap />
       <div className="section-divider" />
 
-      {/* ── Bottom CTA ── */}
       <section className="py-20 relative overflow-hidden">
         <div
           className="absolute inset-0 pointer-events-none"
@@ -114,8 +167,7 @@ export default function JobMatchClient() {
             Stop applying blindly, start matching smartly
           </h2>
           <p className="text-slate-400 mb-8 max-w-md mx-auto">
-            Join 50,000+ job seekers using CareerAI to find roles where
-            they are genuinely competitive.
+            Join 50,000+ job seekers using CareerAI to find roles where they are genuinely competitive.
           </p>
           <button
             type="button"
@@ -123,7 +175,7 @@ export default function JobMatchClient() {
             className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-white transition-all duration-200 hover:scale-[1.03]"
             style={{
               background: "linear-gradient(135deg, #7c3aed, #8b5cf6)",
-              boxShadow: "0 0 40px rgba(139,92,246,0.4)",
+              boxShadow:  "0 0 40px rgba(139,92,246,0.4)",
             }}
           >
             Find My Best Jobs

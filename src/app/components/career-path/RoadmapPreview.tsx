@@ -1,11 +1,13 @@
-import { ROADMAP_PHASES, CareerGoalData } from "@/app/components/career-path/types";
+import { ROADMAP_PHASES, CareerGoalData, RoadmapPhase } from "@/app/components/career-path/types";
 
 interface RoadmapPreviewProps {
   generated: boolean;
   data: CareerGoalData;
+  aiPhases?: RoadmapPhase[];
 }
 
-export default function RoadmapPreview({ generated, data }: RoadmapPreviewProps) {
+export default function RoadmapPreview({ generated, data, aiPhases }: RoadmapPreviewProps) {
+  const phases = (aiPhases && aiPhases.length > 0) ? aiPhases : ROADMAP_PHASES;
   return (
     <div
       className="rounded-2xl border overflow-hidden"
@@ -56,7 +58,7 @@ export default function RoadmapPreview({ generated, data }: RoadmapPreviewProps)
 
         <div className="p-5">
           <div className="flex flex-col gap-3">
-            {ROADMAP_PHASES.map((phase, idx) => (
+            {phases.map((phase, idx) => (
               <div key={phase.id} className="flex items-start gap-3">
                 {/* Timeline dot + line */}
                 <div className="flex flex-col items-center shrink-0">
@@ -70,7 +72,7 @@ export default function RoadmapPreview({ generated, data }: RoadmapPreviewProps)
                   >
                     {phase.id}
                   </div>
-                  {idx < ROADMAP_PHASES.length - 1 && (
+                  {idx < phases.length - 1 && (
                     <div
                       className="w-px mt-1 flex-1"
                       style={{

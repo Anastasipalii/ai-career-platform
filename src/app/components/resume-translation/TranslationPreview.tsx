@@ -3,6 +3,7 @@ import { TranslationFormState } from "@/app/components/resume-translation/types"
 interface TranslationPreviewProps {
   state: TranslationFormState;
   translated: boolean;
+  aiTranslation?: string;
 }
 
 /* ─── Types ─── */
@@ -681,7 +682,7 @@ function ResumeCard({
 }
 
 /* ─── Main export ─── */
-export default function TranslationPreview({ state, translated }: TranslationPreviewProps) {
+export default function TranslationPreview({ state, translated, aiTranslation }: TranslationPreviewProps) {
   const langKey = state.targetLanguage.replace(" (US)", "").replace(" (UK)", "");
   const t = TRANSLATIONS[state.targetLanguage] ?? TRANSLATIONS[langKey];
 
@@ -739,19 +740,41 @@ export default function TranslationPreview({ state, translated }: TranslationPre
           />
 
           {/* Translated */}
-          <ResumeCard
-            label={`Translated · ${state.targetLanguage}`}
-            accentColor="#059669"
-            name="Alexandra Chen"
-            jobTitle={translated ? translatedTitle : ORIGINAL_EXPERIENCE[0].role}
-            contact="alex.chen@email.com  ·  +1 (415) 555-0182  ·  San Francisco, CA"
-            sections={translated ? translatedSections : ORIGINAL_SECTIONS}
-            summary={translated ? translatedSummary : ORIGINAL_SUMMARY}
-            experience={translated ? translatedExp : ORIGINAL_EXPERIENCE}
-            education={translated ? translatedEdu : ORIGINAL_EDUCATION}
-            skills={translated ? translatedSkills : ORIGINAL_SKILLS}
-            dimmed={!translated}
-          />
+          {aiTranslation ? (
+            <div
+              style={{
+                background: "#ffffff",
+                borderRadius: "6px",
+                boxShadow: "0 2px 12px rgba(0,0,0,0.1)",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column" as const,
+              }}
+            >
+              <div style={{ padding: "8px 12px", background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
+                <span style={{ fontSize: "9px", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", color: "#059669" }}>
+                  Translated · {state.targetLanguage}
+                </span>
+              </div>
+              <div style={{ padding: "14px 16px", fontSize: "10.5px", color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap" as const, maxHeight: "480px", overflowY: "auto" as const }}>
+                {aiTranslation}
+              </div>
+            </div>
+          ) : (
+            <ResumeCard
+              label={`Translated · ${state.targetLanguage}`}
+              accentColor="#059669"
+              name="Alexandra Chen"
+              jobTitle={translated ? translatedTitle : ORIGINAL_EXPERIENCE[0].role}
+              contact="alex.chen@email.com  ·  +1 (415) 555-0182  ·  San Francisco, CA"
+              sections={translated ? translatedSections : ORIGINAL_SECTIONS}
+              summary={translated ? translatedSummary : ORIGINAL_SUMMARY}
+              experience={translated ? translatedExp : ORIGINAL_EXPERIENCE}
+              education={translated ? translatedEdu : ORIGINAL_EDUCATION}
+              skills={translated ? translatedSkills : ORIGINAL_SKILLS}
+              dimmed={!translated}
+            />
+          )}
         </div>
       </div>
     </div>

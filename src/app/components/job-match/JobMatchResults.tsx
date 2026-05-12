@@ -109,9 +109,11 @@ interface JobMatchResultsProps {
   matched: boolean;
   isSearching: boolean;
   onSearch: () => void;
+  aiJobs?: JobMatch[];
 }
 
-export default function JobMatchResults({ matched, isSearching, onSearch }: JobMatchResultsProps) {
+export default function JobMatchResults({ matched, isSearching, onSearch, aiJobs }: JobMatchResultsProps) {
+  const jobs = aiJobs && aiJobs.length > 0 ? aiJobs : MOCK_JOBS;
   return (
     <div
       className="rounded-2xl border overflow-hidden"
@@ -130,7 +132,7 @@ export default function JobMatchResults({ matched, isSearching, onSearch }: JobM
               style={{ background: "rgba(139,92,246,0.12)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.2)" }}
             >
               <span className="w-1 h-1 rounded-full bg-violet-400 animate-pulse" />
-              {MOCK_JOBS.length} matches found
+              {jobs.length} matches found
             </div>
           )}
           <div className="flex items-center gap-1.5">
@@ -145,7 +147,7 @@ export default function JobMatchResults({ matched, isSearching, onSearch }: JobM
       {matched ? (
         <div style={{ background: "#0d0d1a", padding: "12px", maxHeight: "580px", overflowY: "auto" }}>
           <div className="flex flex-col gap-3">
-            {MOCK_JOBS.map((job) => (
+            {jobs.map((job) => (
               <JobCard key={job.id} job={job} />
             ))}
           </div>

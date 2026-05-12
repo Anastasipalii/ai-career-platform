@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { INTERVIEW_QUESTIONS } from "@/app/components/interview-coach/types";
 
 interface MockInterviewProps {
-  onFeedbackReady: (questionIndex: number) => void;
+  onFeedbackReady: (questionIndex: number, answer: string) => void;
 }
 
 type MicState = "idle" | "recording" | "processing";
@@ -13,6 +13,7 @@ export default function MockInterview({ onFeedbackReady }: MockInterviewProps) {
   const [activeIdx, setActiveIdx]       = useState(0);
   const [micState, setMicState]         = useState<MicState>("idle");
   const [seconds, setSeconds]           = useState(0);
+  const [typedAnswer, setTypedAnswer]   = useState("");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /* Timer while recording */
@@ -33,19 +34,28 @@ export default function MockInterview({ onFeedbackReady }: MockInterviewProps) {
       setMicState("processing");
       setTimeout(() => {
         setMicState("idle");
-        onFeedbackReady(activeIdx);
+        onFeedbackReady(activeIdx, typedAnswer || "Voice answer recorded.");
+        setTypedAnswer("");
       }, 1500);
     }
+  };
+
+  const handleSubmitText = () => {
+    if (!typedAnswer.trim()) return;
+    onFeedbackReady(activeIdx, typedAnswer.trim());
+    setTypedAnswer("");
   };
 
   const goNext = () => {
     setActiveIdx((i) => Math.min(i + 1, INTERVIEW_QUESTIONS.length - 1));
     setMicState("idle");
+    setTypedAnswer("");
   };
 
   const goPrev = () => {
     setActiveIdx((i) => Math.max(i - 1, 0));
     setMicState("idle");
+    setTypedAnswer("");
   };
 
   const question = INTERVIEW_QUESTIONS[activeIdx];
@@ -222,6 +232,27 @@ export default function MockInterview({ onFeedbackReady }: MockInterviewProps) {
           <p className="text-[11px] text-slate-600 text-center max-w-[260px]">
             Practice speaking your answer out loud — AI will provide structured feedback.
           </p>
+        </div>
+
+        {/* Text answer fallback */}
+        <div className="flex flex-col gap-2">
+          <p className="text-[11px] text-slate-500 text-center">Or type your answer for AI feedback:</p>
+          <textarea
+            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder-slate-500 input-glow resize-none"
+            rows={3}
+            placeholder="Type your answer here…"
+            value={typedAnswer}
+            onChange={(e) => setTypedAnswer(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={handleSubmitText}
+            disabled={!typedAnswer.trim()}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "rgba(245,158,11,0.12)", color: "#fcd34d", border: "1px solid rgba(245,158,11,0.25)" }}
+          >
+            Get AI Feedback
+          </button>
         </div>
 
         {/* Navigation */}

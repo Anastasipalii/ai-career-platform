@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { CareerGoalData } from "@/app/components/career-path/types";
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { CareerGoalData, RoadmapPhase } from "@/app/components/career-path/types";
+import Toast from "@/app/components/ui/Toast";
 import CareerPathHero from "@/app/components/career-path/CareerPathHero";
 import CareerPathUpload from "@/app/components/career-path/CareerPathUpload";
 import CareerGoalForm from "@/app/components/career-path/CareerGoalForm";
@@ -12,8 +15,8 @@ import CareerRoadmap from "@/app/components/career-path/CareerRoadmap";
 import AIRecommendations from "@/app/components/career-path/AIRecommendations";
 
 const INITIAL_GOAL: CareerGoalData = {
-  currentTitle: "Senior Product Designer",
-  targetTitle:  "Head of Design",
+  currentTitle: "",
+  targetTitle:  "",
   industry:     "Technology",
   country:      "United States",
   workStyle:    "Remote",
@@ -22,26 +25,103 @@ const INITIAL_GOAL: CareerGoalData = {
 };
 
 export default function CareerPathClient() {
-  const [goalData, setGoalData]       = useState<CareerGoalData>(INITIAL_GOAL);
-  const [fileName, setFileName]       = useState<string | null>(null);
-  const [generated, setGenerated]     = useState(false);
+  const router = useRouter();
+  const [goalData, setGoalData]         = useState<CareerGoalData>(INITIAL_GOAL);
+  const [fileName, setFileName]         = useState<string | null>(null);
+  const [generated, setGenerated]       = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [aiPhases, setAiPhases]         = useState<RoadmapPhase[]>([]);
+  const [saveStatus, setSaveStatus]     = useState<"idle" | "saving" | "saved">("idle");
+  const [careerPathId, setCareerPathId] = useState<string | null>(null);
+  const [toast, setToast]               = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const handleGenerate = () => {
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  const handleGenerate = async () => {
+    if (!goalData.currentTitle.trim() || !goalData.targetTitle.trim()) {
+      showToast("Please enter your current and target job titles.", "error");
+      return;
+    }
+
     setIsGenerating(true);
     setGenerated(false);
-    setTimeout(() => {
-      setIsGenerating(false);
+    setAiPhases([]);
+
+    try {
+      const res = await fetch("/api/career-path/generate", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(goalData),
+      });
+
+      const data = await res.json() as { phases?: RoadmapPhase[]; error?: string };
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? "Roadmap generation failed.");
+      }
+
+      const phases = data.phases ?? [];
+      setAiPhases(phases);
       setGenerated(true);
-    }, 2200);
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Generation failed. Please try again.",
+        "error"
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!generated || aiPhases.length === 0) {
+      showToast("Generate a roadmap first.", "error");
+      return;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.push("/login"); return; }
+
+    setSaveStatus("saving");
+
+    const payload = {
+      user_id:      session.user.id,
+      current_role: goalData.currentTitle,
+      target_role:  goalData.targetTitle,
+      roadmap:      { phases: aiPhases, goalData },
+      progress:     0,
+    };
+
+    let dbError;
+    if (careerPathId) {
+      const { error } = await supabase.from("career_paths").update(payload).eq("id", careerPathId);
+      dbError = error;
+    } else {
+      const { data, error } = await supabase.from("career_paths").insert(payload).select("id").single();
+      dbError = error;
+      if (!error && data) setCareerPathId((data as { id: string }).id);
+    }
+
+    if (dbError) {
+      setSaveStatus("idle");
+      showToast(`Save failed: ${dbError.message}`, "error");
+    } else {
+      setSaveStatus("saved");
+      showToast("Career roadmap saved to your dashboard!", "success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    }
   };
 
   return (
     <>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <CareerPathHero />
       <div className="section-divider" />
 
-      {/* ── Planner ── */}
       <section id="planner" className="py-16 relative">
         <div
           className="absolute top-0 left-0 w-[500px] h-[500px] rounded-full pointer-events-none"
@@ -58,7 +138,6 @@ export default function CareerPathClient() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
-            {/* Left — upload + form */}
             <div className="flex flex-col gap-5">
               <CareerPathUpload fileName={fileName} onFileChange={setFileName} />
               <CareerGoalForm
@@ -69,10 +148,13 @@ export default function CareerPathClient() {
               />
             </div>
 
-            {/* Right — sticky preview + actions */}
             <div className="lg:sticky lg:top-24 self-start flex flex-col gap-5">
-              <RoadmapPreview generated={generated} data={goalData} />
-              <CareerPathActions hasRoadmap={generated} />
+              <RoadmapPreview generated={generated} data={goalData} aiPhases={aiPhases} />
+              <CareerPathActions
+                hasRoadmap={generated}
+                saveStatus={saveStatus}
+                onSave={handleSave}
+              />
 
               {generated && (
                 <p className="text-xs text-slate-600 text-center -mt-1">
@@ -100,7 +182,6 @@ export default function CareerPathClient() {
       <AIRecommendations />
       <div className="section-divider" />
 
-      {/* ── Bottom CTA ── */}
       <section className="py-20 relative overflow-hidden">
         <div
           className="absolute inset-0 pointer-events-none"
@@ -111,8 +192,7 @@ export default function CareerPathClient() {
             Stop guessing your next move
           </h2>
           <p className="text-slate-400 mb-8 max-w-md mx-auto">
-            Join 50,000+ professionals using CareerAI to build clear,
-            achievable career roadmaps with real milestones.
+            Join 50,000+ professionals using CareerAI to build clear, achievable career roadmaps with real milestones.
           </p>
           <button
             type="button"
@@ -120,7 +200,7 @@ export default function CareerPathClient() {
             className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-white transition-all duration-200 hover:scale-[1.03]"
             style={{
               background: "linear-gradient(135deg, #be185d, #ec4899)",
-              boxShadow: "0 0 40px rgba(236,72,153,0.4)",
+              boxShadow:  "0 0 40px rgba(236,72,153,0.4)",
             }}
           >
             Create My Career Roadmap

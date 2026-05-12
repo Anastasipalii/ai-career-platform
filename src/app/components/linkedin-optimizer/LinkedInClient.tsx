@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import { LinkedInFormData } from "@/app/components/linkedin-optimizer/types";
+import Toast from "@/app/components/ui/Toast";
 import LinkedInHero from "@/app/components/linkedin-optimizer/LinkedInHero";
 import LinkedInForm from "@/app/components/linkedin-optimizer/LinkedInForm";
 import LinkedInResumeUpload from "@/app/components/linkedin-optimizer/LinkedInResumeUpload";
@@ -9,13 +12,19 @@ import LinkedInPreview from "@/app/components/linkedin-optimizer/LinkedInPreview
 import LinkedInExportActions from "@/app/components/linkedin-optimizer/LinkedInExportActions";
 import LinkedInAIFeatures from "@/app/components/linkedin-optimizer/LinkedInAIFeatures";
 
+interface OptimizedContent {
+  headline: string;
+  about: string;
+  skills: string[];
+}
+
 const INITIAL_FORM: LinkedInFormData = {
-  fullName:    "Alexandra Chen",
-  currentRole: "Senior Product Designer",
-  headline:    "Senior Product Designer @ Vercel | UX · Design Systems · AI Products",
+  fullName:    "",
+  currentRole: "",
+  headline:    "",
   about:       "",
   experience:  "",
-  skills:      "Figma, UX Research, Design Systems, Prototyping, AI/ML Products, React",
+  skills:      "",
   careerGoals: "",
   tone:        "Professional",
   goals:       ["Job Search"],
@@ -23,25 +32,83 @@ const INITIAL_FORM: LinkedInFormData = {
 };
 
 export default function LinkedInClient() {
-  const [formData, setFormData]       = useState<LinkedInFormData>(INITIAL_FORM);
-  const [optimized, setOptimized]     = useState(false);
+  const router = useRouter();
+  const [formData, setFormData]         = useState<LinkedInFormData>(INITIAL_FORM);
+  const [optimized, setOptimized]       = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizedContent, setOptimizedContent] = useState<OptimizedContent | null>(null);
+  const [saveStatus, setSaveStatus]     = useState<"idle" | "saving" | "saved">("idle");
+  const [toast, setToast]               = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const handleOptimize = () => {
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  const handleOptimize = async () => {
+    if (!formData.currentRole.trim()) {
+      showToast("Please enter your current role.", "error");
+      return;
+    }
+
     setIsOptimizing(true);
     setOptimized(false);
-    setTimeout(() => {
-      setIsOptimizing(false);
+    setOptimizedContent(null);
+
+    try {
+      const res = await fetch("/api/linkedin/optimize", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(formData),
+      });
+
+      const data = await res.json() as OptimizedContent & { error?: string };
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? "Optimisation failed.");
+      }
+
+      setOptimizedContent(data);
       setOptimized(true);
-    }, 2200);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Optimisation failed. Please try again.", "error");
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!optimizedContent) { showToast("Optimise your profile first.", "error"); return; }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.push("/login"); return; }
+
+    setSaveStatus("saving");
+    const { error } = await supabase.from("linkedin_profiles").insert({
+      user_id:          session.user.id,
+      headline:         optimizedContent.headline,
+      about:            optimizedContent.about,
+      skills:           optimizedContent.skills,
+      optimized_content: optimizedContent,
+    });
+
+    if (error) {
+      setSaveStatus("idle");
+      showToast(`Save failed: ${error.message}`, "error");
+    } else {
+      setSaveStatus("saved");
+      showToast("LinkedIn profile saved to your dashboard!", "success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    }
   };
 
   return (
     <>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <LinkedInHero />
       <div className="section-divider" />
 
-      {/* ── Optimizer ── */}
       <section id="optimizer" className="py-16 relative">
         <div
           className="absolute top-0 left-0 w-[500px] h-[500px] rounded-full pointer-events-none"
@@ -49,7 +116,6 @@ export default function LinkedInClient() {
         />
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Section label */}
           <div className="flex items-center gap-3 mb-8">
             <div className="section-divider flex-1" />
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
@@ -59,7 +125,6 @@ export default function LinkedInClient() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
-            {/* Left — form + upload */}
             <div className="flex flex-col gap-5">
               <LinkedInForm
                 formData={formData}
@@ -70,10 +135,21 @@ export default function LinkedInClient() {
               <LinkedInResumeUpload />
             </div>
 
-            {/* Right — sticky preview + export */}
             <div className="lg:sticky lg:top-24 self-start flex flex-col gap-5">
-              <LinkedInPreview formData={formData} optimized={optimized} />
-              <LinkedInExportActions optimized={optimized} />
+              <LinkedInPreview
+                formData={formData}
+                optimized={optimized}
+                aiHeadline={optimizedContent?.headline}
+                aiAbout={optimizedContent?.about}
+                aiSkills={optimizedContent?.skills}
+              />
+              <LinkedInExportActions
+                optimized={optimized}
+                saveStatus={saveStatus}
+                onSave={handleSave}
+                headline={optimizedContent?.headline}
+                about={optimizedContent?.about}
+              />
 
               {optimized && (
                 <p className="text-xs text-slate-600 text-center -mt-1">
@@ -97,7 +173,6 @@ export default function LinkedInClient() {
       <LinkedInAIFeatures />
       <div className="section-divider" />
 
-      {/* ── Bottom CTA ── */}
       <section className="py-20 relative overflow-hidden">
         <div
           className="absolute inset-0 pointer-events-none"
@@ -116,7 +191,7 @@ export default function LinkedInClient() {
             className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-white transition-all duration-200 hover:scale-[1.03]"
             style={{
               background: "linear-gradient(135deg, #0a66c2, #7c3aed)",
-              boxShadow: "0 0 40px rgba(10,102,194,0.35)",
+              boxShadow:  "0 0 40px rgba(10,102,194,0.35)",
             }}
           >
             Optimize My LinkedIn Profile

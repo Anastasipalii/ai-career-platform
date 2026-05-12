@@ -3,6 +3,7 @@ import { CoverLetterFormData, ToneOption } from "@/app/components/cover-letter/t
 interface CoverLetterPreviewProps {
   formData: CoverLetterFormData;
   generated: boolean;
+  aiContent?: string;
 }
 
 /* ─── Mock letter content keyed by tone ─── */
@@ -53,8 +54,11 @@ const TONE_ACCENT: Record<ToneOption, string> = {
   Creative:     "#ec4899",
 };
 
-export default function CoverLetterPreview({ formData, generated }: CoverLetterPreviewProps) {
-  const paragraphs = buildLetter(formData);
+export default function CoverLetterPreview({ formData, generated, aiContent }: CoverLetterPreviewProps) {
+  // Split AI content into paragraphs, falling back to mock when not generated
+  const paragraphs = aiContent
+    ? aiContent.split(/\n\n+/).map(p => p.trim()).filter(Boolean)
+    : buildLetter(formData);
   const accent     = TONE_ACCENT[formData.tone];
   const today      = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const name       = formData.fullName || "Alexandra Chen";
@@ -102,6 +106,7 @@ export default function CoverLetterPreview({ formData, generated }: CoverLetterP
       {/* Document area */}
       <div style={{ background: "#e5e7eb", padding: "12px", maxHeight: "600px", overflowY: "auto" }}>
         <div
+          id="cover-letter-document"
           style={{
             background: "#ffffff",
             borderRadius: "6px",
