@@ -361,40 +361,69 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
 
       {/* ── Built-in features ── */}
       <div className="section-divider" />
-      <section className="py-20">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      <section className="py-24 relative">
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] rounded-full pointer-events-none"
+          style={{ background: "radial-gradient(ellipse, rgba(124,58,237,0.05) 0%, transparent 70%)" }}
+        />
+
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-14">
+            <div
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border mb-5"
+              style={{ borderColor: "rgba(124,58,237,0.3)", background: "rgba(124,58,237,0.08)" }}
+            >
+              <span className="text-xs font-medium tracking-wide uppercase" style={{ color: "#c4b5fd" }}>
+                Built-in features
+              </span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3">
+              Everything you need{" "}
+              <span className="gradient-text">in one place</span>
+            </h2>
+            <p className="text-slate-400 text-sm max-w-md mx-auto">
+              Professional resume features built directly into the builder — no extra tools needed.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
 
             {/* ATS-Friendly */}
             <div
-              className="group rounded-2xl p-8 border flex flex-col gap-5 transition-all duration-300 hover:border-white/15 hover:-translate-y-0.5"
+              className="group relative rounded-2xl p-5 border text-left transition-all duration-300 hover:border-white/20 hover:-translate-y-0.5 cursor-default"
               style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
             >
               <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                style={{ background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.2)", color: "#a78bfa" }}
+                className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                style={{ background: "radial-gradient(circle at 50% 0%, rgba(124,58,237,0.1) 0%, transparent 55%)" }}
+              />
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
+                style={{ background: "rgba(124,58,237,0.1)", color: "#a78bfa", border: "1px solid rgba(124,58,237,0.2)" }}
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   <path d="M9 12l2 2 4-4" />
                 </svg>
               </div>
-              <div>
-                <h3 className="text-white font-semibold text-base mb-2">ATS-Friendly</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">
-                  Optimize your resume for recruiter systems and automated screenings.
-                </p>
-              </div>
+              <h3 className="text-white font-semibold text-base mb-2 leading-snug">ATS-Friendly</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                Optimize your resume for recruiter systems and automated screenings.
+              </p>
             </div>
 
             {/* Multiple Languages */}
             <div
-              className="group rounded-2xl p-8 border flex flex-col gap-5 transition-all duration-300 hover:border-white/15 hover:-translate-y-0.5"
+              className="group relative rounded-2xl p-5 border text-left transition-all duration-300 hover:border-white/20 hover:-translate-y-0.5 cursor-default"
               style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
             >
               <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", color: "#34d399" }}
+                className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                style={{ background: "radial-gradient(circle at 50% 0%, rgba(16,185,129,0.1) 0%, transparent 55%)" }}
+              />
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
+                style={{ background: "rgba(16,185,129,0.1)", color: "#34d399", border: "1px solid rgba(16,185,129,0.2)" }}
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" />
@@ -402,34 +431,35 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
                   <path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" />
                 </svg>
               </div>
-              <div>
-                <h3 className="text-white font-semibold text-base mb-2">Multiple Languages</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">
-                  Create resumes in multiple languages including Arabic.
-                </p>
-              </div>
+              <h3 className="text-white font-semibold text-base mb-2 leading-snug">Multiple Languages</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                Create resumes in multiple languages including Arabic.
+              </p>
             </div>
 
             {/* One-Click Export */}
             <div
-              className="group rounded-2xl p-8 border flex flex-col gap-5 transition-all duration-300 hover:border-white/15 hover:-translate-y-0.5"
+              className="group relative rounded-2xl p-5 border text-left transition-all duration-300 hover:border-white/20 hover:-translate-y-0.5 cursor-default"
               style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
             >
               <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                style={{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.2)", color: "#67e8f9" }}
+                className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                style={{ background: "radial-gradient(circle at 50% 0%, rgba(6,182,212,0.1) 0%, transparent 55%)" }}
+              />
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
+                style={{ background: "rgba(6,182,212,0.1)", color: "#67e8f9", border: "1px solid rgba(6,182,212,0.2)" }}
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2v13M8 11l4 4 4-4" />
-                  <path d="M20 17v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2" />
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
               </div>
-              <div>
-                <h3 className="text-white font-semibold text-base mb-2">One-Click Export</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">
-                  Download clean PDF resumes instantly or save them to your dashboard.
-                </p>
-              </div>
+              <h3 className="text-white font-semibold text-base mb-2 leading-snug">One-Click Export</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                Download clean PDF resumes instantly or save them to your dashboard.
+              </p>
             </div>
 
           </div>
