@@ -37,28 +37,18 @@ export interface TranslationOption {
 export const TRANSLATION_OPTIONS: TranslationOption[] = [
   {
     id: "formatting",
-    label: "Preserve professional formatting",
+    label: "Preserve formatting",
     description: "Section headers, bullet points, and layout stay intact",
   },
   {
     id: "ats",
-    label: "Keep ATS-friendly structure",
+    label: "ATS-safe structure",
     description: "Machine-readable format retained after translation",
   },
   {
     id: "tone",
-    label: "Adapt tone for local job market",
+    label: "Localized job-market tone",
     description: "Phrasing adjusted for cultural expectations in the target country",
-  },
-  {
-    id: "titles",
-    label: "Translate job titles naturally",
-    description: "Titles localized to industry-standard equivalents, not literal",
-  },
-  {
-    id: "dates",
-    label: "Keep dates and contact details unchanged",
-    description: "Phone numbers, emails, and dates remain in original format",
   },
 ];
 

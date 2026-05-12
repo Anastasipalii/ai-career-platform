@@ -200,36 +200,6 @@ export default function ResumeTranslationClient() {
 
       <div className="section-divider" />
       <TranslationAIFeatures />
-      <div className="section-divider" />
-
-      <section className="py-20 relative overflow-hidden">
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(124,58,237,0.06))" }}
-        />
-        <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Apply globally, not just locally
-          </h2>
-          <p className="text-slate-400 mb-8 max-w-md mx-auto">
-            Join 50,000+ job seekers using CareerAI to expand their career opportunities across borders.
-          </p>
-          <button
-            type="button"
-            onClick={handleTranslate}
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-white transition-all duration-200 hover:scale-[1.03]"
-            style={{
-              background: "linear-gradient(135deg, #059669, #7c3aed)",
-              boxShadow:  "0 0 40px rgba(5,150,105,0.35)",
-            }}
-          >
-            Translate My Resume Now
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
-      </section>
     </>
   );
 }

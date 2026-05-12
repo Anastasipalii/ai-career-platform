@@ -33,7 +33,8 @@ export type LanguageOption =
   | "Turkish"
   | "Romanian"
   | "Czech"
-  | "Albanian";
+  | "Albanian"
+  | "Arabic";
 
 export interface LinkedInFormData {
   fullName: string;
@@ -107,4 +108,5 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
   "Romanian",
   "Czech",
   "Albanian",
+  "Arabic",
 ];

@@ -1,9 +1,7 @@
 export type ToneOption =
   | "Professional"
   | "Friendly"
-  | "Confident"
-  | "Formal"
-  | "Creative";
+  | "Confident";
 
 export type LanguageOption =
   | "English (US)"
@@ -21,25 +19,26 @@ export type LanguageOption =
   | "Turkish"
   | "Romanian"
   | "Czech"
-  | "Albanian";
+  | "Albanian"
+  | "Arabic";
 
 export interface CoverLetterFormData {
-  fullName: string;
-  jobTitle: string;
-  company: string;
+  // Visible in simplified form
   jobDescription: string;
-  resumeSummary: string;
-  keySkills: string;
-  tone: ToneOption;
-  language: LanguageOption;
+  tone:           ToneOption;
+  language:       LanguageOption;
+  // Advanced / legacy (hidden from main form)
+  fullName:       string;
+  jobTitle:       string;
+  company:        string;
+  resumeSummary:  string;
+  keySkills:      string;
 }
 
 export const TONE_OPTIONS: ToneOption[] = [
   "Professional",
   "Friendly",
   "Confident",
-  "Formal",
-  "Creative",
 ];
 
 export const LANGUAGE_OPTIONS: LanguageOption[] = [
@@ -59,12 +58,11 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
   "Romanian",
   "Czech",
   "Albanian",
+  "Arabic",
 ];
 
 export const TONE_DESCRIPTIONS: Record<ToneOption, string> = {
   Professional: "Clear, polished, business-appropriate",
   Friendly:     "Warm, approachable, conversational",
   Confident:    "Bold, assertive, results-focused",
-  Formal:       "Structured, traditional, highly formal",
-  Creative:     "Original, expressive, memorable",
 };

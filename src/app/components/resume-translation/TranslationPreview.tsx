@@ -756,7 +756,23 @@ export default function TranslationPreview({ state, translated, aiTranslation }:
                   Translated · {state.targetLanguage}
                 </span>
               </div>
-              <div style={{ padding: "14px 16px", fontSize: "10.5px", color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap" as const, maxHeight: "480px", overflowY: "auto" as const }}>
+              {/* RTL layout for Arabic and other RTL languages */}
+              <div
+                dir={state.targetLanguage === "Arabic" ? "rtl" : "ltr"}
+                style={{
+                  padding:     "14px 16px",
+                  fontSize:    "10.5px",
+                  color:       "#374151",
+                  lineHeight:  1.7,
+                  whiteSpace:  "pre-wrap" as const,
+                  maxHeight:   "480px",
+                  overflowY:   "auto" as const,
+                  textAlign:   state.targetLanguage === "Arabic" ? "right" : "left",
+                  fontFamily:  state.targetLanguage === "Arabic"
+                    ? "'Segoe UI', 'Noto Sans Arabic', Arial, sans-serif"
+                    : "inherit",
+                }}
+              >
                 {aiTranslation}
               </div>
             </div>

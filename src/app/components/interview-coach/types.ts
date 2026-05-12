@@ -61,7 +61,8 @@ export type InterviewLanguage =
   | "Spanish"
   | "Italian"
   | "French"
-  | "Portuguese";
+  | "Portuguese"
+  | "Arabic";
 
 export interface InterviewSetupData {
   jobTitle: string;
@@ -102,7 +103,7 @@ export const INTERVIEW_TYPES: InterviewType[] = [
 
 export const INTERVIEW_LANGUAGES: InterviewLanguage[] = [
   "English (US)", "English (UK)", "German", "Ukrainian",
-  "Russian", "Polish", "Spanish", "Italian", "French", "Portuguese",
+  "Russian", "Polish", "Spanish", "Italian", "French", "Portuguese", "Arabic",
 ];
 
 export const INDUSTRIES: string[] = [
