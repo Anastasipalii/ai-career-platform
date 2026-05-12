@@ -1,3 +1,41 @@
+// ── New simplified types ──────────────────────────────────────────────────────
+export type InterviewMode = "quick" | "hr" | "technical" | "full";
+
+export interface AIQuestion {
+  question: string;
+  category: string;
+  tip:      string;
+}
+
+export interface SessionAnswer {
+  question: AIQuestion;
+  answer:   string;
+  feedback: FeedbackData;
+}
+
+export interface SimpleSetupData {
+  jobDescription: string;
+  jobTitle:       string;
+  mode:           InterviewMode;
+  language:       InterviewLanguage;
+}
+
+export const MODE_LABELS: Record<InterviewMode, string> = {
+  quick:     "Quick Practice",
+  hr:        "HR Questions",
+  technical: "Technical Questions",
+  full:      "Full Simulation",
+};
+
+export const MODE_COUNTS: Record<InterviewMode, number> = {
+  quick: 5, hr: 8, technical: 10, full: 12,
+};
+
+export const MODE_DURATIONS: Record<InterviewMode, string> = {
+  quick: "~15 min", hr: "~20 min", technical: "~30 min", full: "~45 min",
+};
+
+// ── Legacy types (kept for backward compatibility) ────────────────────────────
 export type SeniorityLevel =
   | "Intern"
   | "Junior"
