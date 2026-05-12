@@ -10,7 +10,6 @@ interface ExportSectionProps {
   isSaved: boolean;
 }
 
-// ── Save button ──────────────────────────────────────────────────────────────
 function SaveButtonContent({ saveStatus, isSaved }: { saveStatus: SaveStatus; isSaved: boolean }) {
   if (saveStatus === "saving") {
     return (
@@ -66,7 +65,21 @@ function saveButtonStyle(saveStatus: SaveStatus): React.CSSProperties {
   return { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.75)" };
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+function buildResumeText(formData: ResumeFormData): string {
+  const parts: string[] = [];
+  if (formData.fullName) parts.push(formData.fullName);
+  if (formData.jobTitle) parts.push(formData.jobTitle);
+  if (formData.summary) parts.push(`\nSummary:\n${formData.summary}`);
+  if (formData.skills.length) parts.push(`\nSkills: ${formData.skills.join(", ")}`);
+  formData.experience.forEach((e) => {
+    parts.push(`\n${e.role} at ${e.company} (${e.startDate}–${e.endDate})\n${e.description}`);
+  });
+  formData.education.forEach((e) => {
+    parts.push(`\n${e.degree} in ${e.field}, ${e.institution}`);
+  });
+  return parts.join("\n");
+}
+
 export default function ExportSection({
   formData,
   onSave,
@@ -75,9 +88,9 @@ export default function ExportSection({
   pdfStatus,
   isSaved,
 }: ExportSectionProps) {
-  const filename = formData.fullName
-    ? `${formData.fullName.toLowerCase().replace(/\s+/g, "-")}-resume`
-    : "my-resume";
+  const handleCopy = () => {
+    navigator.clipboard.writeText(buildResumeText(formData)).catch(() => {});
+  };
 
   return (
     <div
@@ -97,7 +110,6 @@ export default function ExportSection({
             background: "linear-gradient(135deg, #7c3aed, #06b6d4)",
             boxShadow: pdfStatus === "generating" ? "none" : "0 0 24px rgba(124,58,237,0.3)",
           }}
-          title={pdfStatus === "generating" ? "Generating PDF…" : `Download ${filename}.pdf`}
         >
           {pdfStatus === "generating" ? (
             <>
@@ -117,7 +129,7 @@ export default function ExportSection({
           )}
         </button>
 
-        {/* Secondary — Save / Update */}
+        {/* Save / Update */}
         <button
           type="button"
           onClick={onSave}
@@ -128,27 +140,18 @@ export default function ExportSection({
           <SaveButtonContent saveStatus={saveStatus} isSaved={isSaved} />
         </button>
 
-        {/* Tertiary — Share (not yet available) */}
+        {/* Copy Text */}
         <button
           type="button"
-          disabled
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm cursor-not-allowed"
-          style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.25)" }}
-          title="Share links coming soon"
+          onClick={handleCopy}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all duration-200 hover:border-white/20 hover:text-white"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.45)" }}
         >
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-            <circle cx="11.5" cy="3" r="1.5" stroke="currentColor" strokeWidth="1.25" />
-            <circle cx="3.5" cy="7.5" r="1.5" stroke="currentColor" strokeWidth="1.25" />
-            <circle cx="11.5" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.25" />
-            <path d="M5 6.5l5-3M5 8.5l5 3" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="4" y="4" width="8" height="9" rx="1" />
+            <path d="M10 4V2.5a.5.5 0 00-.5-.5h-7a.5.5 0 00-.5.5v8a.5.5 0 00.5.5H4" />
           </svg>
-          Share Resume
-          <span
-            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-1"
-            style={{ background: "rgba(255,255,255,0.06)", color: "#475569" }}
-          >
-            Soon
-          </span>
+          Copy Text
         </button>
       </div>
     </div>

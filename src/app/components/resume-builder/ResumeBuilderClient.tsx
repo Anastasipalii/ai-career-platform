@@ -14,7 +14,7 @@ import Toast from "@/app/components/ui/Toast";
 import ResumeHero from "@/app/components/resume-builder/ResumeHero";
 import ResumeForm from "@/app/components/resume-builder/ResumeForm";
 import AIAssistantPanel from "@/app/components/resume-builder/AIAssistantPanel";
-import ResumeTemplates from "@/app/components/resume-builder/ResumeTemplates";
+import TranslationPanel from "@/app/components/resume-builder/TranslationPanel";
 import CustomizationPanel from "@/app/components/resume-builder/CustomizationPanel";
 import AIFeaturesPanel from "@/app/components/resume-builder/AIFeaturesPanel";
 import ResumePreview from "@/app/components/resume-builder/ResumePreview";
@@ -114,6 +114,8 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
   const [pdfStatus, setPdfStatus]         = useState<PdfStatus>("idle");
   const [toast, setToast]                 = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [myResumes, setMyResumes]         = useState<SavedResumeRecord[]>([]);
+  const [translationLang, setTranslationLang] = useState("English (US)");
+  const isRTL = translationLang === "Arabic";
 
   // ── Utilities ──────────────────────────────────────────────────────────────
 
@@ -242,14 +244,17 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
       return;
     }
 
+    const rtlFont = "'Noto Sans Arabic', 'Arabic UI Text', Arial, sans-serif";
+    const effectiveFont = isRTL ? rtlFont : fontFamily;
+
     printWin.document.write(`<!DOCTYPE html>
-<html>
+<html${isRTL ? ' dir="rtl"' : ''}>
 <head>
   <meta charset="utf-8">
   <title>${filename}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: ${fontFamily}; background: #ffffff; }
+    body { font-family: ${effectiveFont}; background: #ffffff;${isRTL ? " direction: rtl; text-align: right;" : ""} }
     @page { margin: 0; size: A4 portrait; }
     @media print {
       html, body { width: 210mm; }
@@ -306,7 +311,7 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
       <div className="section-divider" />
 
       {/* ── Builder ── */}
-      <section className="py-16 relative">
+      <section id="builder" className="py-16 relative">
         <div
           className="absolute top-0 left-0 w-[500px] h-[500px] rounded-full pointer-events-none"
           style={{ background: "radial-gradient(circle, rgba(124,58,237,0.05) 0%, transparent 65%)" }}
@@ -328,9 +333,10 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
               <AIAssistantPanel formData={formData} onUpdate={handleAiUpdate} />
             </div>
 
-            <div className="lg:sticky lg:top-24 self-start flex flex-col gap-5">
+            {/* Right — preview + customize + export */}
+            <div className="lg:sticky lg:top-24 self-start flex flex-col gap-4">
+              <ResumePreview formData={formData} settings={settings} isRTL={isRTL} />
               <CustomizationPanel settings={settings} onChange={setSettings} />
-              <ResumePreview formData={formData} settings={settings} />
               <ExportSection
                 formData={formData}
                 onSave={handleSave}
@@ -340,12 +346,28 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
                 isSaved={resumeId !== null}
               />
             </div>
-          </div>  {/* end grid */}
+          </div>
         </div>
       </section>
 
+      {/* ── Translation ── */}
       <div className="section-divider" />
-      <ResumeTemplates selectedTemplate={selectedTemplate} onSelect={handleSelectTemplate} />
+      <section className="py-10">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="section-divider flex-1" />
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
+              Translation
+            </span>
+            <div className="section-divider flex-1" />
+          </div>
+          <TranslationPanel
+            formData={formData}
+            onUpdate={handleAiUpdate}
+            onTargetLanguage={setTranslationLang}
+          />
+        </div>
+      </section>
 
       {/* ── My Resumes ── */}
       {myResumes.length > 0 && (

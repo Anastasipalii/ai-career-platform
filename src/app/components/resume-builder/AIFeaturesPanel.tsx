@@ -809,8 +809,8 @@ function ToolModal({
   );
 }
 
-// ── Feature card data ─────────────────────────────────────────────────────────
-interface FeatureDef {
+// ── AI Assistance compact items ───────────────────────────────────────────────
+interface AssistItem {
   id: ToolId;
   title: string;
   description: string;
@@ -820,82 +820,40 @@ interface FeatureDef {
   border: string;
 }
 
-const FEATURES: FeatureDef[] = [
-  {
-    id: "ats_score",
-    title: "ATS Score Optimizer",
-    description:
-      "Instantly score your resume against real ATS systems and get a prioritised breakdown of what to fix before you apply.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-      </svg>
-    ),
-    color: "#7c3aed", bg: "rgba(124,58,237,0.1)", border: "rgba(124,58,237,0.2)",
-  },
-  {
-    id: "translation",
-    title: "Resume Translation",
-    description:
-      "Translate your resume into 30+ languages while preserving professional formatting and tone — in one click.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="2" y1="12" x2="22" y2="12" />
-        <path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" />
-      </svg>
-    ),
-    color: "#10b981", bg: "rgba(16,185,129,0.1)", border: "rgba(16,185,129,0.2)",
-  },
+const ASSIST_ITEMS: AssistItem[] = [
   {
     id: "rewriter",
-    title: "AI Content Rewriter",
-    description:
-      "Paste weak bullet points and AI rewrites them into strong, quantified, keyword-rich impact statements that recruiters notice.",
+    title: "Improve writing",
+    description: "Rewrite bullet points into strong, quantified impact statements",
     icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-        <path d="M15 6l3 3" />
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11.5 2.5a1.5 1.5 0 012.121 2.121L5 13.25l-3 .75.75-3 8.75-8.5z" />
       </svg>
     ),
     color: "#06b6d4", bg: "rgba(6,182,212,0.1)", border: "rgba(6,182,212,0.2)",
   },
   {
-    id: "keyword_match",
-    title: "Keyword Matching",
-    description:
-      "Paste a job description and AI highlights missing keywords, aligns your skills section, and reorders content by relevance.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
-        <path d="M8 11h6M11 8v6" />
-      </svg>
-    ),
-    color: "#f59e0b", bg: "rgba(245,158,11,0.1)", border: "rgba(245,158,11,0.2)",
-  },
-  {
     id: "grammar",
-    title: "Grammar & Style Fixes",
-    description:
-      "AI automatically corrects grammar, tense inconsistencies, passive voice, and formatting — across every section of your resume.",
+    title: "Fix grammar",
+    description: "Correct tense, passive voice, and style across any section",
     icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 7V4h16v3" /><path d="M9 20h6" /><path d="M12 4v16" />
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 5V3h10v2M7 3v10M5.5 13h3" />
       </svg>
     ),
     color: "#ec4899", bg: "rgba(236,72,153,0.1)", border: "rgba(236,72,153,0.2)",
   },
   {
-    id: "cover_letter",
-    title: "Cover Letter Generator",
-    description:
-      "Generate a tailored, compelling cover letter from your resume and a job URL in under 30 seconds — no blank page paralysis.",
+    id: "translation",
+    title: "Translate section",
+    description: "Translate summary, experience, or skills into 25+ languages",
     icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="8" cy="8" r="7" />
+        <path d="M1 8h14M8 1a10 10 0 010 14M8 1a10 10 0 000 14" />
       </svg>
     ),
-    color: "#8b5cf6", bg: "rgba(139,92,246,0.1)", border: "rgba(139,92,246,0.2)",
+    color: "#10b981", bg: "rgba(16,185,129,0.1)", border: "rgba(16,185,129,0.2)",
   },
 ];
 
@@ -908,62 +866,47 @@ interface AIFeaturesPanelProps {
 export default function AIFeaturesPanel({ formData, onUpdate }: AIFeaturesPanelProps) {
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
 
-  const activeFeature = activeTool ? FEATURES.find((f) => f.id === activeTool) ?? null : null;
+  const activeMeta = activeTool
+    ? ASSIST_ITEMS.find((f) => f.id === activeTool) ?? null
+    : null;
 
   return (
     <>
-      <section className="py-24 relative">
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] rounded-full pointer-events-none"
-          style={{ background: "radial-gradient(ellipse, rgba(6,182,212,0.05) 0%, transparent 70%)" }}
-        />
-
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-cyan-500/30 bg-cyan-500/10 mb-5">
-              <span className="text-xs font-medium text-cyan-300 tracking-wide uppercase">AI features</span>
-            </div>
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
-              AI that works{" "}
-              <span className="gradient-text">behind every word</span>
-            </h2>
-            <p className="text-slate-400 text-base max-w-xl mx-auto leading-relaxed">
-              Six intelligent tools embedded directly into the builder — click any card to use it.
-            </p>
+      <section className="py-12 relative">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="section-divider flex-1" />
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
+              AI assistance
+            </span>
+            <div className="section-divider flex-1" />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FEATURES.map((feat) => (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {ASSIST_ITEMS.map((item) => (
               <button
-                key={feat.id}
+                key={item.id}
                 type="button"
-                onClick={() => setActiveTool(feat.id)}
-                className="group relative rounded-2xl p-5 border text-left transition-all duration-300 hover:border-white/20 hover:-translate-y-0.5 cursor-pointer"
+                onClick={() => setActiveTool(item.id)}
+                className="group flex items-center gap-3 px-4 py-3.5 rounded-xl border text-left transition-all duration-200 hover:border-white/15 hover:-translate-y-0.5"
                 style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
               >
-                {/* Hover glow */}
                 <div
-                  className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                  style={{ background: `radial-gradient(circle at 50% 0%, ${feat.bg} 0%, transparent 55%)` }}
-                />
-
-                {/* "Click to use" hint */}
-                <div
-                  className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-[10px] font-medium px-2 py-0.5 rounded-full"
-                  style={{ background: feat.bg, color: feat.color, border: `1px solid ${feat.border}` }}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-105"
+                  style={{ background: item.bg, color: item.color, border: `1px solid ${item.border}` }}
                 >
-                  Use →
+                  {item.icon}
                 </div>
-
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
-                  style={{ background: feat.bg, color: feat.color, border: `1px solid ${feat.border}` }}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-white leading-snug">{item.title}</p>
+                  <p className="text-xs text-slate-600 leading-snug mt-0.5 truncate">{item.description}</p>
+                </div>
+                <svg
+                  width="12" height="12" viewBox="0 0 12 12" fill="none"
+                  className="shrink-0 ml-auto text-slate-600 group-hover:text-slate-400 transition-colors"
                 >
-                  {feat.icon}
-                </div>
-
-                <h3 className="text-white font-semibold text-base mb-2 leading-snug">{feat.title}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed">{feat.description}</p>
+                  <path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
             ))}
           </div>
@@ -971,10 +914,10 @@ export default function AIFeaturesPanel({ formData, onUpdate }: AIFeaturesPanelP
       </section>
 
       {/* Tool modal */}
-      {activeTool && activeFeature && (
+      {activeTool && activeMeta && (
         <ToolModal
           tool={activeTool}
-          toolMeta={activeFeature}
+          toolMeta={activeMeta}
           formData={formData}
           onUpdate={onUpdate}
           onClose={() => setActiveTool(null)}

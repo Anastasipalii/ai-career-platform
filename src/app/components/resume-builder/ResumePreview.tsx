@@ -9,6 +9,7 @@ import {
 interface ResumePreviewProps {
   formData: ResumeFormData;
   settings: CustomizationSettings;
+  isRTL?: boolean;
 }
 
 /* ─── Theme lookup ─── */
@@ -545,12 +546,15 @@ function ModernCard({ formData, theme, sp, fs }: {
   );
 }
 
+const ARABIC_FONT = "'Noto Sans Arabic', 'Arabic UI Text', 'Segoe UI', Arial, sans-serif";
+
 /* ─── Main export ─── */
-export default function ResumePreview({ formData, settings }: ResumePreviewProps) {
+export default function ResumePreview({ formData, settings, isRTL = false }: ResumePreviewProps) {
   const theme = THEME_COLORS[settings.colorTheme];
   const sp = SPACING[settings.spacing];
   const fs = sp.fontSize;
   const sharedProps = { formData, theme, sp, fs };
+  const fontFamily = isRTL ? ARABIC_FONT : FONT_STACKS[settings.font];
 
   return (
     <div
@@ -564,7 +568,14 @@ export default function ResumePreview({ formData, settings }: ResumePreviewProps
       >
         <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Live preview</p>
         <div className="flex items-center gap-4">
-          {/* Active theme pill */}
+          {isRTL && (
+            <span
+              className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+              style={{ background: "rgba(16,185,129,0.12)", color: "#6ee7b7", border: "1px solid rgba(16,185,129,0.2)" }}
+            >
+              RTL
+            </span>
+          )}
           <div
             className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium"
             style={{
@@ -585,16 +596,18 @@ export default function ResumePreview({ formData, settings }: ResumePreviewProps
       </div>
 
       {/* Resume document */}
-      <div style={{ background: "#e5e7eb", padding: "12px", maxHeight: "560px", overflowY: "auto" }}>
+      <div style={{ background: "#e5e7eb", padding: "12px", maxHeight: "480px", overflowY: "auto" }}>
         <div
           id="resume-document"
+          dir={isRTL ? "rtl" : "ltr"}
           style={{
             background: "#ffffff",
             borderRadius: "6px",
             overflow: "hidden",
             boxShadow: "0 2px 16px rgba(0,0,0,0.14)",
-            fontFamily: FONT_STACKS[settings.font],
-            transition: "box-shadow 0.2s ease, font-family 0.1s ease",
+            fontFamily,
+            textAlign: isRTL ? "right" : "left",
+            transition: "box-shadow 0.2s ease",
           }}
         >
           {settings.layout === "One-column"  && <OneColumn      {...sharedProps} />}

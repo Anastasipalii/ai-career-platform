@@ -9,7 +9,6 @@ import {
   PROFICIENCY_LEVELS,
 } from "@/app/components/resume-builder/types";
 import PhotoUpload from "@/app/components/resume-builder/PhotoUpload";
-import TranslationPanel from "@/app/components/resume-builder/TranslationPanel";
 
 interface ResumeFormProps {
   formData: ResumeFormData;
@@ -593,8 +592,6 @@ export default function ResumeForm({ formData, onChange }: ResumeFormProps) {
         </div>
       </Section>
 
-      {/* ── 7. Translation ── */}
-      <TranslationPanel />
     </div>
   );
 }
