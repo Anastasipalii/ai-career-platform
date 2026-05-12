@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   FileText, Mail, Network, Languages, Mic,
   Search, TrendingUp, ChevronDown, Menu, X,
@@ -75,17 +76,22 @@ const TOOLS: Tool[] = [
   },
 ];
 
-const NAV_LINKS = [
-  { label: "Features",  href: "#features" },
-  { label: "Pricing",   href: "#pricing" },
-  { label: "About",     href: "#about" },
-  { label: "Dashboard", href: "/dashboard" },
+type NavLink =
+  | { label: string; type: "anchor"; id: string }
+  | { label: string; type: "page"; href: string };
+
+const NAV_LINKS: NavLink[] = [
+  { label: "Features",  type: "anchor", id: "features" },
+  { label: "Pricing",   type: "anchor", id: "pricing" },
+  { label: "About",     type: "anchor", id: "about" },
+  { label: "Dashboard", type: "page",   href: "/dashboard" },
 ];
 
 export default function Navbar() {
-  const [mobileOpen, setMobileOpen]             = useState(false);
-  const [toolsOpen, setToolsOpen]               = useState(false);
-  const [mobileToolsOpen, setMobileToolsOpen]   = useState(false);
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen]           = useState(false);
+  const [toolsOpen, setToolsOpen]             = useState(false);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,7 +104,22 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const closeAll = () => { setMobileOpen(false); setToolsOpen(false); };
+  const closeAll = () => {
+    setMobileOpen(false);
+    setToolsOpen(false);
+  };
+
+  const handleAnchorNav = (id: string) => {
+    closeAll();
+    if (pathname === "/") {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      window.location.href = `/#${id}`;
+    }
+  };
+
+  const linkCls = "px-3.5 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 transition-colors duration-150";
+  const mobileLinkCls = "px-3.5 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-150";
 
   return (
     <header
@@ -141,7 +162,6 @@ export default function Navbar() {
                 />
               </button>
 
-              {/* Dropdown */}
               {toolsOpen && (
                 <div
                   className="absolute top-full left-0 mt-2.5 w-[540px] rounded-2xl border p-3"
@@ -153,7 +173,6 @@ export default function Navbar() {
                     animation: "dropIn 0.14s ease",
                   }}
                 >
-                  {/* Header */}
                   <div className="flex items-center gap-2 px-3 pb-2.5 mb-1 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
                     <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">AI Tools</span>
                   </div>
@@ -191,16 +210,27 @@ export default function Navbar() {
             </div>
 
             {/* Flat links */}
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                onClick={closeAll}
-                className="px-3.5 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 transition-colors duration-150"
-              >
-                {link.label}
-              </Link>
-            ))}
+            {NAV_LINKS.map((link) =>
+              link.type === "anchor" ? (
+                <button
+                  key={link.label}
+                  type="button"
+                  onClick={() => handleAnchorNav(link.id)}
+                  className={linkCls}
+                >
+                  {link.label}
+                </button>
+              ) : (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  onClick={closeAll}
+                  className={linkCls}
+                >
+                  {link.label}
+                </Link>
+              )
+            )}
           </nav>
 
           {/* ── Desktop CTAs ── */}
@@ -270,16 +300,28 @@ export default function Navbar() {
               </div>
             )}
 
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                onClick={closeAll}
-                className="px-3.5 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-150"
-              >
-                {link.label}
-              </Link>
-            ))}
+            {/* Mobile nav links */}
+            {NAV_LINKS.map((link) =>
+              link.type === "anchor" ? (
+                <button
+                  key={link.label}
+                  type="button"
+                  onClick={() => handleAnchorNav(link.id)}
+                  className={mobileLinkCls + " text-left w-full"}
+                >
+                  {link.label}
+                </button>
+              ) : (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  onClick={closeAll}
+                  className={mobileLinkCls}
+                >
+                  {link.label}
+                </Link>
+              )
+            )}
 
             <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-white/[0.06]">
               <Link
