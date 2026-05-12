@@ -18,7 +18,6 @@ import {
 import Toast from "@/app/components/ui/Toast";
 import InterviewHero from "@/app/components/interview-coach/InterviewHero";
 import FeedbackPanel from "@/app/components/interview-coach/FeedbackPanel";
-import PracticeModes from "@/app/components/interview-coach/PracticeModes";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Phase = "setup" | "active" | "complete";
@@ -706,38 +705,6 @@ export default function InterviewClient() {
         </div>
       </section>
 
-      <div className="section-divider" />
-      <PracticeModes />
-      <div className="section-divider" />
-
-      {/* Bottom CTA */}
-      <section className="py-20 relative overflow-hidden">
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.08), rgba(124,58,237,0.06))" }}
-        />
-        <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Walk in confident, walk out with the offer
-          </h2>
-          <p className="text-slate-400 mb-8 max-w-md mx-auto">
-            Join 50,000+ job seekers who use CareerAI to prepare smarter and interview better.
-          </p>
-          <a
-            href="#coach"
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-white transition-all duration-200 hover:scale-[1.03]"
-            style={{
-              background: "linear-gradient(135deg, #d97706, #7c3aed)",
-              boxShadow:  "0 0 40px rgba(217,119,6,0.35)",
-            }}
-          >
-            Start Practicing Now
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </a>
-        </div>
-      </section>
     </>
   );
 }
