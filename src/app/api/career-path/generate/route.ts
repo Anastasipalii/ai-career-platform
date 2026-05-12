@@ -75,20 +75,27 @@ Timeline: ${timeGoal || "12 months"}
 
 Divide into 4 phases of roughly ${phaseMonths} months each.
 
-Return JSON:
+Return JSON with EXACTLY 4 phases, each with EXACTLY 3 tasks:
 {
   "phases": [
     {
       "id": 1,
       "title": "<phase name, e.g. Foundation>",
       "months": "<e.g. Month 1–${phaseMonths}>",
-      "tasks": ["<specific, actionable milestone 1>", "<milestone 2>", "<milestone 3>", "<milestone 4>", "<milestone 5>"]
+      "tasks": [
+        "<short concrete action, max 8 words>",
+        "<short concrete action, max 8 words>",
+        "<short concrete action, max 8 words>"
+      ]
     }
   ]
 }
 
-Make tasks specific, measurable, and realistic for transitioning from ${currentTitle} to ${targetTitle}.
-Phase names should reflect the progression: Foundation → Growth → Execution → Leadership (adapt as appropriate).`;
+Rules:
+- Exactly 3 tasks per phase — no more, no less
+- Each task is a short, concrete, checkbox-style action (e.g. "Update resume and LinkedIn profile")
+- Tasks must be specific to transitioning from ${currentTitle} to ${targetTitle}
+- Phase names reflect progression: Foundation → Skills → Outreach → Offers (adapt as appropriate)`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -112,6 +119,7 @@ Phase names should reflect the progression: Foundation → Growth → Execution 
       id:    i + 1,
       color: PHASE_COLORS[i] ?? PHASE_COLORS[0],
       bg:    PHASE_BGS[i]    ?? PHASE_BGS[0],
+      tasks: (p.tasks ?? []).slice(0, 3),   // enforce max 3 tasks
     }));
 
     return NextResponse.json({ phases } as GenerateResult);

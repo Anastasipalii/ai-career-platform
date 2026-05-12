@@ -1,12 +1,9 @@
 import {
   CareerGoalData,
-  WorkStyle,
   ExperienceLevel,
   TimeGoal,
-  WORK_STYLES,
   EXPERIENCE_LEVELS,
   TIME_GOALS,
-  INDUSTRIES,
 } from "@/app/components/career-path/types";
 
 interface CareerGoalFormProps {
@@ -31,99 +28,49 @@ const pillActive: React.CSSProperties = {
   color: "white",
 };
 
-function Section({ title, color, children }: { title: string; color: string; children: React.ReactNode }) {
-  return (
-    <div
-      className="rounded-2xl p-6 border"
-      style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-    >
-      <div className="flex items-center gap-2.5 mb-5">
-        <div className="w-1 h-5 rounded-full shrink-0" style={{ background: color }} />
-        <h3 className="text-white font-semibold text-base">{title}</h3>
-      </div>
-      {children}
-    </div>
-  );
-}
-
 export default function CareerGoalForm({ data, onChange, onGenerate, isGenerating }: CareerGoalFormProps) {
   const set = <K extends keyof CareerGoalData>(key: K, value: CareerGoalData[K]) =>
     onChange({ ...data, [key]: value });
 
   return (
-    <div className="flex flex-col gap-5">
-
-      {/* ── Current & Target Role ── */}
-      <Section title="Your Career Goals" color="#ec4899">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5">Current job title</label>
-            <input
-              className={inputCls}
-              placeholder="Product Designer"
-              value={data.currentTitle}
-              onChange={(e) => set("currentTitle", e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5">Target job title</label>
-            <input
-              className={inputCls}
-              placeholder="Head of Design"
-              value={data.targetTitle}
-              onChange={(e) => set("targetTitle", e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5">Industry</label>
-            <div className="relative">
-              <select
-                className={inputCls + " appearance-none cursor-pointer pr-9"}
-                value={data.industry}
-                onChange={(e) => set("industry", e.target.value)}
-              >
-                {INDUSTRIES.map((ind) => (
-                  <option key={ind} value={ind}>{ind}</option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5">Preferred country</label>
-            <input
-              className={inputCls}
-              placeholder="United States, Germany, Remote…"
-              value={data.country}
-              onChange={(e) => set("country", e.target.value)}
-            />
-          </div>
+    <div
+      className="rounded-2xl p-6 border flex flex-col gap-5"
+      style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
+    >
+      {/* Current & Target Role */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs text-slate-500 mb-1.5">Current job title <span className="text-pink-400">*</span></label>
+          <input
+            className={inputCls}
+            placeholder="e.g. Product Designer"
+            value={data.currentTitle}
+            onChange={(e) => set("currentTitle", e.target.value)}
+          />
         </div>
-      </Section>
-
-      {/* ── Work Style ── */}
-      <Section title="Work Style" color="#8b5cf6">
-        <div className="grid grid-cols-3 gap-2.5">
-          {WORK_STYLES.map((ws) => (
-            <button
-              key={ws}
-              type="button"
-              onClick={() => set("workStyle", ws as WorkStyle)}
-              className="py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 hover:opacity-90"
-              style={data.workStyle === ws ? pillActive : pillBase}
-            >
-              {ws}
-            </button>
-          ))}
+        <div>
+          <label className="block text-xs text-slate-500 mb-1.5">Target job title <span className="text-pink-400">*</span></label>
+          <input
+            className={inputCls}
+            placeholder="e.g. Head of Design"
+            value={data.targetTitle}
+            onChange={(e) => set("targetTitle", e.target.value)}
+          />
         </div>
-      </Section>
+        <div className="sm:col-span-2">
+          <label className="block text-xs text-slate-500 mb-1.5">Preferred country</label>
+          <input
+            className={inputCls}
+            placeholder="e.g. United States, Germany, or Remote"
+            value={data.country}
+            onChange={(e) => set("country", e.target.value)}
+          />
+        </div>
+      </div>
 
-      {/* ── Experience Level ── */}
-      <Section title="Experience Level" color="#06b6d4">
+      {/* Experience Level */}
+      <div>
+        <label className="block text-xs text-slate-500 mb-2">Experience level</label>
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {EXPERIENCE_LEVELS.map((lvl) => (
             <button
@@ -137,13 +84,11 @@ export default function CareerGoalForm({ data, onChange, onGenerate, isGeneratin
             </button>
           ))}
         </div>
-      </Section>
+      </div>
 
-      {/* ── Time Goal ── */}
-      <Section title="Time Goal" color="#f59e0b">
-        <p className="text-xs text-slate-500 mb-4">
-          How long do you want to achieve your target role?
-        </p>
+      {/* Time Goal */}
+      <div>
+        <label className="block text-xs text-slate-500 mb-2">Time to reach goal</label>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           {TIME_GOALS.map((tg) => {
             const active = data.timeGoal === tg;
@@ -152,7 +97,7 @@ export default function CareerGoalForm({ data, onChange, onGenerate, isGeneratin
                 key={tg}
                 type="button"
                 onClick={() => set("timeGoal", tg as TimeGoal)}
-                className="py-3.5 rounded-xl text-sm font-semibold text-center transition-all duration-200 hover:opacity-90 flex flex-col items-center gap-0.5"
+                className="py-3 rounded-xl text-sm font-semibold text-center transition-all duration-200 hover:opacity-90 flex flex-col items-center gap-0.5"
                 style={active ? pillActive : pillBase}
               >
                 <span>{tg.split(" ")[0]}</span>
@@ -161,9 +106,9 @@ export default function CareerGoalForm({ data, onChange, onGenerate, isGeneratin
             );
           })}
         </div>
-      </Section>
+      </div>
 
-      {/* ── Generate button ── */}
+      {/* Generate button */}
       <button
         type="button"
         onClick={onGenerate}
