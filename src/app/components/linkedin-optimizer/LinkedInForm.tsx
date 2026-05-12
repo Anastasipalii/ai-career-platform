@@ -1,16 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Search, RefreshCw, MapPin, Briefcase,
-  Wifi, Award, Code2, Palette,
-} from "lucide-react";
+import { Search, RefreshCw, Briefcase, Wifi, Award } from "lucide-react";
 import {
   LinkedInFormData,
-  LinkedInTone,
   CareerGoal,
-  TONE_OPTIONS,
-  TONE_META,
   CAREER_GOALS,
   GOAL_META,
   LANGUAGE_OPTIONS,
@@ -18,13 +12,10 @@ import {
 
 const GOAL_ICONS: Record<CareerGoal, React.ReactNode> = {
   "Job Search":         <Search size={16} />,
-  "Career Change":      <RefreshCw size={16} />,
-  "Relocation":         <MapPin size={16} />,
-  "Freelance":          <Briefcase size={16} />,
   "Remote Work":        <Wifi size={16} />,
+  "Career Change":      <RefreshCw size={16} />,
   "Executive Position": <Award size={16} />,
-  "Tech Career":        <Code2 size={16} />,
-  "Creative Career":    <Palette size={16} />,
+  "Freelance":          <Briefcase size={16} />,
 };
 
 interface LinkedInFormProps {
@@ -89,10 +80,7 @@ function MicButton({
       }}
     >
       {isActive && (
-        <span
-          className="absolute inset-0 rounded-full animate-ping"
-          style={{ background: "rgba(239,68,68,0.18)" }}
-        />
+        <span className="absolute inset-0 rounded-full animate-ping" style={{ background: "rgba(239,68,68,0.18)" }} />
       )}
       <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
         <rect x="4" y="1" width="5" height="7" rx="2.5" stroke="currentColor" strokeWidth="1.25" />
@@ -140,7 +128,7 @@ export default function LinkedInForm({
   return (
     <div className="flex flex-col gap-5">
 
-      {/* ── 1. Basic Info ── */}
+      {/* ── 1. Profile Basics ── */}
       <Section title="Profile Basics" color="#0a66c2">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -250,26 +238,12 @@ export default function LinkedInForm({
         <VoiceHint show={activeMic === "skills"} />
       </Section>
 
-      {/* ── 5. Career Goals (text) ── */}
-      <Section title="Career Goals" color="#f59e0b">
-        <label className="block text-xs text-slate-500 mb-1.5">
-          What are you hoping to achieve with an optimised LinkedIn profile?
-        </label>
-        <textarea
-          className={textareaCls}
-          rows={3}
-          placeholder="Looking to transition into a Head of Design role at a Series B–D AI startup in Europe, open to remote..."
-          value={formData.careerGoals}
-          onChange={(e) => set("careerGoals", e.target.value)}
-        />
-      </Section>
-
-      {/* ── 6. Goal selector ── */}
+      {/* ── 5. Optimization Goals ── */}
       <Section title="Optimization Goals" color="#10b981">
         <p className="text-xs text-slate-500 mb-4">
-          Select all that apply — AI will tailor the language for your specific situation
+          Select all that apply — AI will tailor the language for your situation
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
           {CAREER_GOALS.map((goal) => {
             const meta = GOAL_META[goal];
             const active = formData.goals.includes(goal);
@@ -303,42 +277,7 @@ export default function LinkedInForm({
         </div>
       </Section>
 
-      {/* ── 7. Tone ── */}
-      <Section title="Tone of Voice" color="#ec4899">
-        <p className="text-xs text-slate-500 mb-4">Choose how your optimised profile should sound</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {TONE_OPTIONS.map((tone) => {
-            const meta = TONE_META[tone];
-            const active = formData.tone === tone;
-            return (
-              <button
-                key={tone}
-                type="button"
-                onClick={() => set("tone", tone as LinkedInTone)}
-                className="flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all duration-200 hover:-translate-y-0.5"
-                style={
-                  active
-                    ? { background: meta.bg, borderColor: meta.border, boxShadow: `0 0 20px ${meta.bg}` }
-                    : { background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }
-                }
-              >
-                <div
-                  className="w-2 h-2 rounded-full mt-1 shrink-0 transition-colors"
-                  style={{ background: active ? meta.color : "rgba(255,255,255,0.2)" }}
-                />
-                <div>
-                  <p className="text-sm font-medium" style={{ color: active ? meta.color : "rgba(255,255,255,0.7)" }}>
-                    {tone}
-                  </p>
-                  <p className="text-xs text-slate-600 mt-0.5">{meta.description}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </Section>
-
-      {/* ── 8. Language ── */}
+      {/* ── 6. Output Language ── */}
       <Section title="Output Language" color="#a78bfa">
         <label className="block text-xs text-slate-500 mb-1.5">
           Profile will be optimised and written in this language
