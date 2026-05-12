@@ -13,6 +13,7 @@ import {
 import Toast from "@/app/components/ui/Toast";
 import ResumeHero from "@/app/components/resume-builder/ResumeHero";
 import ResumeForm from "@/app/components/resume-builder/ResumeForm";
+import AIAssistantPanel from "@/app/components/resume-builder/AIAssistantPanel";
 import ResumeTemplates from "@/app/components/resume-builder/ResumeTemplates";
 import CustomizationPanel from "@/app/components/resume-builder/CustomizationPanel";
 import AIFeaturesPanel from "@/app/components/resume-builder/AIFeaturesPanel";
@@ -161,6 +162,10 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
     setSelectedTemplate(key);
     setSettings(TEMPLATE_PRESETS[key]);
   };
+
+  const handleAiUpdate = useCallback((updates: Partial<ResumeFormData>) => {
+    setFormData((current) => ({ ...current, ...updates }));
+  }, []);
 
   const handleSave = async () => {
     setSaveStatus("saving");
@@ -317,7 +322,11 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
-            <ResumeForm formData={formData} onChange={setFormData} />
+            {/* Left — form + AI assistant */}
+            <div className="flex flex-col gap-5">
+              <ResumeForm formData={formData} onChange={setFormData} />
+              <AIAssistantPanel formData={formData} onUpdate={handleAiUpdate} />
+            </div>
 
             <div className="lg:sticky lg:top-24 self-start flex flex-col gap-5">
               <CustomizationPanel settings={settings} onChange={setSettings} />
@@ -331,7 +340,7 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
                 isSaved={resumeId !== null}
               />
             </div>
-          </div>
+          </div>  {/* end grid */}
         </div>
       </section>
 
