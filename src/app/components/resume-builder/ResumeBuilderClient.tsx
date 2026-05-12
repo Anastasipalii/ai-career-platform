@@ -361,7 +361,7 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
       )}
 
       <div className="section-divider" />
-      <AIFeaturesPanel />
+      <AIFeaturesPanel formData={formData} onUpdate={handleAiUpdate} />
     </>
   );
 }
