@@ -14,9 +14,7 @@ import Toast from "@/app/components/ui/Toast";
 import ResumeHero from "@/app/components/resume-builder/ResumeHero";
 import ResumeForm from "@/app/components/resume-builder/ResumeForm";
 import AIAssistantPanel from "@/app/components/resume-builder/AIAssistantPanel";
-import TranslationPanel from "@/app/components/resume-builder/TranslationPanel";
 import CustomizationPanel from "@/app/components/resume-builder/CustomizationPanel";
-import AIFeaturesPanel from "@/app/components/resume-builder/AIFeaturesPanel";
 import ResumePreview from "@/app/components/resume-builder/ResumePreview";
 import ExportSection from "@/app/components/resume-builder/ExportSection";
 
@@ -114,8 +112,6 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
   const [pdfStatus, setPdfStatus]         = useState<PdfStatus>("idle");
   const [toast, setToast]                 = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [myResumes, setMyResumes]         = useState<SavedResumeRecord[]>([]);
-  const [translationLang, setTranslationLang] = useState("English (US)");
-  const isRTL = translationLang === "Arabic";
 
   // ── Utilities ──────────────────────────────────────────────────────────────
 
@@ -244,17 +240,14 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
       return;
     }
 
-    const rtlFont = "'Noto Sans Arabic', 'Arabic UI Text', Arial, sans-serif";
-    const effectiveFont = isRTL ? rtlFont : fontFamily;
-
     printWin.document.write(`<!DOCTYPE html>
-<html${isRTL ? ' dir="rtl"' : ''}>
+<html>
 <head>
   <meta charset="utf-8">
   <title>${filename}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: ${effectiveFont}; background: #ffffff;${isRTL ? " direction: rtl; text-align: right;" : ""} }
+    body { font-family: ${fontFamily}; background: #ffffff; }
     @page { margin: 0; size: A4 portrait; }
     @media print {
       html, body { width: 210mm; }
@@ -335,7 +328,7 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
 
             {/* Right — preview + customize + export */}
             <div className="lg:sticky lg:top-24 self-start flex flex-col gap-4">
-              <ResumePreview formData={formData} settings={settings} isRTL={isRTL} />
+              <ResumePreview formData={formData} settings={settings} />
               <CustomizationPanel settings={settings} onChange={setSettings} />
               <ExportSection
                 formData={formData}
@@ -345,27 +338,11 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
                 pdfStatus={pdfStatus}
                 isSaved={resumeId !== null}
               />
+              <p className="text-xs text-slate-600 text-center px-2">
+                AI-powered writing and formatting assistance included.
+              </p>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* ── Translation ── */}
-      <div className="section-divider" />
-      <section className="py-10">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="section-divider flex-1" />
-            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
-              Translation
-            </span>
-            <div className="section-divider flex-1" />
-          </div>
-          <TranslationPanel
-            formData={formData}
-            onUpdate={handleAiUpdate}
-            onTargetLanguage={setTranslationLang}
-          />
         </div>
       </section>
 
@@ -381,9 +358,6 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
           />
         </>
       )}
-
-      <div className="section-divider" />
-      <AIFeaturesPanel formData={formData} onUpdate={handleAiUpdate} />
     </>
   );
 }
