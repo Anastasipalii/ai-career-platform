@@ -13,14 +13,15 @@ import ExportActions from "@/app/components/cover-letter/ExportActions";
 import AIFeatures from "@/app/components/cover-letter/AIFeatures";
 
 const INITIAL_FORM: CoverLetterFormData = {
+  jobDescription: "",
+  tone:           "Professional",
+  language:       "English (US)",
+  // Advanced (hidden from form — kept for API compatibility)
   fullName:       "",
   jobTitle:       "",
   company:        "",
-  jobDescription: "",
   resumeSummary:  "",
   keySkills:      "",
-  tone:           "Professional",
-  language:       "English (US)",
 };
 
 export default function CoverLetterClient() {
@@ -38,8 +39,8 @@ export default function CoverLetterClient() {
   }, []);
 
   const handleGenerate = async () => {
-    if (!formData.jobTitle.trim() || !formData.company.trim()) {
-      showToast("Please enter a job title and company name.", "error");
+    if (!formData.jobDescription.trim()) {
+      showToast("Please paste a job description or vacancy URL.", "error");
       return;
     }
 
@@ -90,11 +91,11 @@ export default function CoverLetterClient() {
 
     setSaveStatus("saving");
     const { error } = await supabase.from("cover_letters").insert({
-      user_id:     session.user.id,
-      company_name: formData.company || "Unknown Company",
-      job_title:   formData.jobTitle || "Unknown Role",
-      language:    formData.language,
-      content:     aiContent,
+      user_id:      session.user.id,
+      company_name: formData.company   || "Job Application",
+      job_title:    formData.jobTitle  || "Cover Letter",
+      language:     formData.language,
+      content:      aiContent,
     });
 
     if (error) {
@@ -109,9 +110,9 @@ export default function CoverLetterClient() {
 
   const handleCopy = () => {
     if (!aiContent) return;
-    navigator.clipboard.writeText(aiContent).then(() => {
-      showToast("Copied to clipboard!", "success");
-    }).catch(() => showToast("Copy failed.", "error"));
+    navigator.clipboard.writeText(aiContent)
+      .then(() => showToast("Copied to clipboard!", "success"))
+      .catch(() => showToast("Copy failed.", "error"));
   };
 
   const handleDownload = () => {
@@ -122,11 +123,7 @@ export default function CoverLetterClient() {
     const win = window.open("", "_blank", "width=800,height=1100");
     if (!win) { showToast("Allow popups to download PDF.", "error"); return; }
 
-    const filename = formData.fullName
-      ? `${formData.fullName.toLowerCase().replace(/\s+/g, "-")}-cover-letter`
-      : "cover-letter";
-
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${filename}</title>
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>cover-letter</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#fff}
 @page{margin:0;size:A4}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
 </head><body>${el.innerHTML}</body></html>`);
@@ -148,7 +145,7 @@ export default function CoverLetterClient() {
         />
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3 mb-8">
+          <div className="flex items-center gap-3 mb-10">
             <div className="section-divider flex-1" />
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
               Cover letter generator
@@ -157,16 +154,18 @@ export default function CoverLetterClient() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
+            {/* Left — upload first, then form */}
             <div className="flex flex-col gap-5">
+              <ResumeUpload />
               <CoverLetterForm
                 formData={formData}
                 onChange={setFormData}
                 onGenerate={handleGenerate}
                 isGenerating={isGenerating}
               />
-              <ResumeUpload />
             </div>
 
+            {/* Right — sticky preview + export */}
             <div className="lg:sticky lg:top-24 self-start flex flex-col gap-5">
               <CoverLetterPreview formData={formData} generated={generated} aiContent={aiContent} />
               <ExportActions
@@ -180,7 +179,7 @@ export default function CoverLetterClient() {
 
               {generated && (
                 <p className="text-xs text-slate-600 text-center -mt-1">
-                  Change any field and click{" "}
+                  Edit any field and click{" "}
                   <button
                     type="button"
                     onClick={handleGenerate}
@@ -188,7 +187,7 @@ export default function CoverLetterClient() {
                   >
                     Generate
                   </button>{" "}
-                  again to refresh
+                  to refresh
                 </p>
               )}
             </div>
@@ -198,36 +197,6 @@ export default function CoverLetterClient() {
 
       <div className="section-divider" />
       <AIFeatures />
-      <div className="section-divider" />
-
-      <section className="py-20 relative overflow-hidden">
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: "linear-gradient(135deg, rgba(124,58,237,0.08), rgba(6,182,212,0.06))" }}
-        />
-        <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Ready to land your next interview?
-          </h2>
-          <p className="text-slate-400 mb-8 max-w-md mx-auto">
-            Join 50,000+ job seekers who use CareerAI to write cover letters that get responses.
-          </p>
-          <button
-            type="button"
-            onClick={handleGenerate}
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-white transition-all duration-200 hover:scale-[1.03]"
-            style={{
-              background:  "linear-gradient(135deg, #7c3aed, #06b6d4)",
-              boxShadow:   "0 0 40px rgba(124,58,237,0.35)",
-            }}
-          >
-            Generate My Cover Letter
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
-      </section>
     </>
   );
 }

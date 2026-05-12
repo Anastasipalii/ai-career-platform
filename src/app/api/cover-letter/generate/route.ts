@@ -2,14 +2,15 @@ import OpenAI from "openai";
 import { NextRequest } from "next/server";
 
 interface GenerateBody {
-  fullName: string;
-  jobTitle: string;
-  company: string;
   jobDescription: string;
-  resumeSummary: string;
-  keySkills: string;
-  tone: string;
-  language: string;
+  tone:           string;
+  language:       string;
+  // Optional advanced fields
+  fullName?:      string;
+  jobTitle?:      string;
+  company?:       string;
+  resumeSummary?: string;
+  keySkills?:     string;
 }
 
 const errorJson = (msg: string, status: number) =>
@@ -30,37 +31,52 @@ export async function POST(req: NextRequest) {
     return errorJson("Invalid request body.", 400);
   }
 
-  const { fullName, jobTitle, company, jobDescription, resumeSummary, keySkills, tone, language } = body;
+  const {
+    jobDescription,
+    tone = "Professional",
+    language = "English (US)",
+    fullName,
+    jobTitle,
+    company,
+    resumeSummary,
+    keySkills,
+  } = body;
 
-  if (!jobTitle?.trim() || !company?.trim()) {
-    return errorJson("Job title and company are required.", 400);
+  if (!jobDescription?.trim()) {
+    return errorJson("Job description is required.", 400);
   }
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   const toneGuide: Record<string, string> = {
-    Professional: "Clear, polished, and business-appropriate. Avoid clichés.",
+    Professional: "Clear, polished, and business-appropriate. No clichés or filler phrases.",
     Friendly:     "Warm, approachable, and conversational while staying professional.",
-    Confident:    "Bold, assertive, and results-focused. Lead with impact.",
-    Formal:       "Structured, traditional, and highly formal. Use formal vocabulary.",
-    Creative:     "Original, expressive, and memorable. Show personality.",
+    Confident:    "Bold, assertive, and results-focused. Lead with concrete impact.",
   };
 
-  const system = `You are an expert cover letter writer. Write in ${language || "English (US)"}. ${toneGuide[tone] || toneGuide.Professional}
-Output ONLY the body of the cover letter — exactly 4 paragraphs separated by blank lines. No greeting (Dear...), no salutation (Sincerely,...), no subject line. Just the 4 paragraphs.`;
+  const system = `You are an expert cover letter writer. Write in ${language}.
+Tone: ${toneGuide[tone] ?? toneGuide.Professional}
+Output ONLY the 4-paragraph body of the cover letter — no greeting (Dear...), no closing (Sincerely...), no subject line. Just the 4 body paragraphs separated by blank lines.`;
 
-  const user = `Write a cover letter body for:
-Name: ${fullName || "the applicant"}
-Applying for: ${jobTitle} at ${company}
-Resume summary: ${resumeSummary || "Experienced professional with relevant skills"}
-Key skills: ${keySkills || "Not specified"}
-${jobDescription ? `Job description:\n${jobDescription.substring(0, 1000)}` : ""}
+  // Build context from whatever the user provided
+  const contextParts: string[] = [];
+  if (jobTitle || company) {
+    contextParts.push(`Target role: ${[jobTitle, company].filter(Boolean).join(" at ")}`);
+  }
+  if (fullName) contextParts.push(`Applicant: ${fullName}`);
+  if (resumeSummary) contextParts.push(`Background: ${resumeSummary}`);
+  if (keySkills) contextParts.push(`Key skills: ${keySkills}`);
 
-Write exactly 4 compelling paragraphs that:
-1. Open with why this specific role and company excite the applicant
-2. Highlight 2-3 measurable achievements from the resume that are most relevant
-3. Connect their skills to the company's specific needs
-4. Close with a clear call to action`;
+  const user = `Write a tailored cover letter body.
+
+${contextParts.length > 0 ? contextParts.join("\n") + "\n\n" : ""}Job description:
+${jobDescription.substring(0, 1500)}
+
+Write exactly 4 compelling paragraphs:
+1. Opening — express genuine interest in this specific opportunity based on the job description
+2. Value — highlight 2-3 relevant achievements with concrete results (invent realistic examples if no background provided)
+3. Fit — connect skills and approach to the company's specific needs from the job description
+4. Closing — confident, direct call to action`;
 
   try {
     const stream = await openai.chat.completions.create({
@@ -69,7 +85,7 @@ Write exactly 4 compelling paragraphs that:
         { role: "system", content: system },
         { role: "user",   content: user },
       ],
-      stream: true,
+      stream:      true,
       temperature: 0.75,
     });
 
@@ -95,6 +111,9 @@ Write exactly 4 compelling paragraphs that:
       },
     });
   } catch (err) {
+    if (err instanceof Error && (err.message.includes("429") || err.message.toLowerCase().includes("quota"))) {
+      return errorJson("AI generation is unavailable right now. Please check OpenAI billing or try again later.", 429);
+    }
     const msg = err instanceof Error ? err.message : "AI request failed.";
     return errorJson(msg, 500);
   }

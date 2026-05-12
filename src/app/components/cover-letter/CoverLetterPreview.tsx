@@ -8,38 +8,27 @@ interface CoverLetterPreviewProps {
 
 /* ─── Mock letter content keyed by tone ─── */
 const TONE_OPENERS: Record<ToneOption, string> = {
-  Professional: "I am writing to express my strong interest in",
-  Friendly:     "I was genuinely excited to come across the opening for",
-  Confident:    "With a proven track record of delivering impact, I am applying for",
-  Formal:       "I respectfully submit my application for the position of",
-  Creative:     "Great products start with people who obsess over them — that is why I am applying for",
+  Professional: "I am writing to express my strong interest in this opportunity.",
+  Friendly:     "I was genuinely excited to come across this opening and would love to be considered.",
+  Confident:    "With a proven track record of delivering impact, I am applying for this role with confidence.",
 };
 
 const TONE_CLOSERS: Record<ToneOption, string> = {
   Professional: "I would welcome the opportunity to discuss how my background aligns with your team's goals.",
   Friendly:     "I would love to connect and explore how I can contribute to your team.",
   Confident:    "I am confident this role is the right next step and look forward to demonstrating that in person.",
-  Formal:       "I am available at your earliest convenience for an interview and thank you for your consideration.",
-  Creative:     "Let us build something great together — I cannot wait to show you what I can do.",
 };
 
 function buildLetter(data: CoverLetterFormData): string[] {
-  const name    = data.fullName    || "Alexandra Chen";
-  const role    = data.jobTitle    || "Senior Product Designer";
-  const company = data.company     || "Vercel";
-  const skills  = data.keySkills   || "Figma, UX Research, Design Systems, Prototyping";
-  const summary = data.resumeSummary ||
-    "Senior Product Designer with 6+ years building AI-powered products at scale. Led design systems at Vercel and Linear, driving measurable improvements in user onboarding and engagement.";
-
   const opener = TONE_OPENERS[data.tone];
   const closer = TONE_CLOSERS[data.tone];
 
   return [
-    `${opener} the ${role} role at ${company}. Having spent the last six years designing at the intersection of clarity and ambition, I believe this position is a natural next step for my career.`,
+    `${opener} Having spent the last several years building impactful products at scale, I believe this position is a natural next step for my career.`,
 
-    `${summary} At Vercel, I led a full redesign of the developer dashboard — reducing time-to-first-deploy by 34% — and built a design system adopted across all 12 product surfaces. My core skills include ${skills}, which I understand are central to this role.`,
+    `My background combines strategic thinking with hands-on execution. I have led cross-functional projects, driven measurable improvements in key metrics, and built systems that scale. The skills I have developed are directly relevant to what this role requires.`,
 
-    `What draws me to ${company} is not just the product, but the way the team approaches craft. The attention to detail in the design language, the care for developer experience, and the speed at which you ship are exactly the environment where I do my best work.`,
+    `What draws me to this opportunity is the combination of meaningful work and a team that clearly values craft. I thrive in environments where design, engineering, and product move together — and where the work has real impact on real people.`,
 
     `${closer}`,
   ];
@@ -50,20 +39,17 @@ const TONE_ACCENT: Record<ToneOption, string> = {
   Professional: "#7c3aed",
   Friendly:     "#06b6d4",
   Confident:    "#f59e0b",
-  Formal:       "#6b7280",
-  Creative:     "#ec4899",
 };
 
 export default function CoverLetterPreview({ formData, generated, aiContent }: CoverLetterPreviewProps) {
-  // Split AI content into paragraphs, falling back to mock when not generated
   const paragraphs = aiContent
     ? aiContent.split(/\n\n+/).map(p => p.trim()).filter(Boolean)
     : buildLetter(formData);
-  const accent     = TONE_ACCENT[formData.tone];
-  const today      = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  const name       = formData.fullName || "Alexandra Chen";
-  const company    = formData.company  || "Vercel";
-  const role       = formData.jobTitle || "Senior Product Designer";
+  const accent  = TONE_ACCENT[formData.tone];
+  const today   = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const name    = formData.fullName || "Your Name";
+  const company = formData.company  || "Hiring Manager";
+  const role    = formData.jobTitle || "the role";
 
   return (
     <div
