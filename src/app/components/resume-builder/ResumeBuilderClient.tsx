@@ -334,6 +334,7 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
                 formData={formData}
                 onSave={handleSave}
                 onDownload={handleDownload}
+                onToast={showToast}
                 saveStatus={saveStatus}
                 pdfStatus={pdfStatus}
                 isSaved={resumeId !== null}
