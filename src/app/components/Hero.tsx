@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Hero() {
   const avatarColors = ["#7c3aed", "#06b6d4", "#ec4899", "#f59e0b"];
   const initials = ["A", "M", "S", "J"];
@@ -45,8 +47,8 @@ export default function Hero() {
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-12">
-            <a
-              href="#"
+            <Link
+              href="/signup"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl font-semibold text-white text-sm transition-all duration-200 hover:scale-[1.03]"
               style={{
                 background: "linear-gradient(135deg, #7c3aed, #06b6d4)",
@@ -57,13 +59,13 @@ export default function Hero() {
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                 <path d="M2.5 7.5h10M8.5 3.5l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-            </a>
-            <a
-              href="#features"
+            </Link>
+            <Link
+              href="/ai-workflow"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl font-semibold text-slate-300 text-sm border border-white/10 hover:border-white/20 hover:text-white transition-all duration-200"
             >
-              Explore features
-            </a>
+              Explore AI Workflow
+            </Link>
           </div>
 
           {/* Social proof */}

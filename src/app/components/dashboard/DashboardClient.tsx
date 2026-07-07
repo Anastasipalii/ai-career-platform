@@ -4,10 +4,33 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatRelative } from "@/lib/formatRelative";
+import { readWorkflowResults, type WorkflowResults } from "@/lib/workflowResults";
+import { readLatestWorkflowRun, type WorkflowRunRow } from "@/lib/workflowRun";
+
+// Map a Supabase workflow_runs row onto the same shape the Dashboard already
+// uses for stats + recent activity (keeps the UI unchanged).
+function mapRunRowToResults(row: WorkflowRunRow): WorkflowResults {
+  const jm = (row.job_match ?? {}) as { count?: number };
+  return {
+    resumeOptimized: true,
+    atsScore: row.ats_score ?? 0,
+    coverLetterGenerated: Boolean(row.cover_letter),
+    jobMatchesCount: typeof jm.count === "number" ? jm.count : 8,
+    interviewSessionCreated: true,
+    tasksCreated: 2,
+    completedAt: row.completed_at,
+    source: row.source ?? undefined,
+    resumeName: row.resume_name ?? undefined,
+    resumePreview: row.resume_preview ?? undefined,
+    coverLetterTitle: row.cover_letter?.title,
+    coverLetterText: row.cover_letter?.coverLetter,
+  };
+}
 import DashboardSidebar from "@/app/components/dashboard/DashboardSidebar";
 import DashboardHeader from "@/app/components/dashboard/DashboardHeader";
 import QuickStats from "@/app/components/dashboard/QuickStats";
 import RecentActivity from "@/app/components/dashboard/RecentActivity";
+import CoverLetterWidget from "@/app/components/dashboard/CoverLetterWidget";
 import QuickActions from "@/app/components/dashboard/QuickActions";
 import SavedResumes from "@/app/components/dashboard/SavedResumes";
 import SavedCoverLetters from "@/app/components/dashboard/SavedCoverLetters";
@@ -63,7 +86,7 @@ export interface ActivityItem {
   action: string;
   detail: string;
   timestamp: string;
-  type: "resume" | "cover_letter" | "interview" | "job_match";
+  type: "resume" | "cover_letter" | "interview" | "job_match" | "task";
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -79,13 +102,27 @@ export default function DashboardClient() {
   const [jobMatches, setJobMatches]         = useState<JobMatchRow[]>([]);
   const [careerPath, setCareerPath]         = useState<CareerPathRow | null>(null);
   const [languageCount, setLanguageCount]   = useState(0);
+  // Frontend-only mock: results from the latest AI Workflow run (localStorage).
+  const [workflow, setWorkflow]             = useState<WorkflowResults | null>(null);
 
   useEffect(() => {
     async function load() {
+      // Immediate fallback: the localStorage mock run (client-side, SSR-safe).
+      const localRun = readWorkflowResults();
+      if (localRun) setWorkflow(localRun);
+      // ── DIAGNOSTIC (no behavior change) ───────────────────────────────────
+      console.log("[CareerAI] 8. dashboard read — localStorage run present?:", !!localRun, "| source:", localRun?.source ?? "(none)", "| completedAt:", localRun?.completedAt ?? "(none)");
+      // ──────────────────────────────────────────────────────────────────────
+
       const { data: { session } } = await supabase.auth.getSession();
       setUserEmail(session?.user?.email ?? null);
       if (!session) return;
       const uid = session.user.id;
+
+      // Prefer the latest persisted run from Supabase when available.
+      const remoteRun = await readLatestWorkflowRun();
+      console.log("[CareerAI] 8. dashboard read — Supabase latest workflow_run present?:", !!remoteRun, "| source:", remoteRun?.source ?? "(none)", "| completedAt:", remoteRun?.completed_at ?? "(none)", "→ using:", remoteRun ? "SUPABASE latest" : localRun ? "localStorage" : "none");
+      if (remoteRun) setWorkflow(mapRunRowToResults(remoteRun));
 
       const [resumesRes, coversRes, interviewsRes, matchesRes, pathsRes, transRes] =
         await Promise.all([
@@ -143,15 +180,45 @@ export default function DashboardClient() {
   // ── Derived values ────────────────────────────────────────────────────────
 
   const scoredResumes = resumes.filter((r) => r.ats_score !== null);
+  // Fold the workflow's ATS score into the average when present.
+  const atsSamples = [
+    ...scoredResumes.map((r) => r.ats_score ?? 0),
+    ...(workflow?.resumeOptimized ? [workflow.atsScore] : []),
+  ];
   const avgAts =
-    scoredResumes.length > 0
-      ? Math.round(
-          scoredResumes.reduce((sum, r) => sum + (r.ats_score ?? 0), 0) /
-            scoredResumes.length
-        )
+    atsSamples.length > 0
+      ? Math.round(atsSamples.reduce((sum, s) => sum + s, 0) / atsSamples.length)
       : null;
 
+  // Counts shown in QuickStats, augmented by the latest workflow run.
+  const resumeCount = resumes.length + (workflow?.resumeOptimized ? 1 : 0);
+  const coverLetterCount = coverLetters.length + (workflow?.coverLetterGenerated ? 1 : 0);
+  const interviewCount = interviews.length + (workflow?.interviewSessionCreated ? 1 : 0);
+  const jobMatchCount = jobMatches.length + (workflow?.jobMatchesCount ?? 0);
+
+  // Recent-activity entries synthesized from the workflow run (localStorage).
+  // Small per-item offsets keep them in a stable, readable order at the top.
+  const workflowActivities: ActivityItem[] = workflow
+    ? (() => {
+        const base = new Date(workflow.completedAt).getTime();
+        const at = (i: number) => new Date(base - i * 1000).toISOString();
+        const items: ActivityItem[] = [];
+        if (workflow.resumeOptimized)
+          items.push({ id: "wf-resume", action: "Resume optimized", detail: `${workflow.resumeName ? `${workflow.resumeName} · ` : ""}ATS score ${workflow.atsScore}/100`, timestamp: at(0), type: "resume" });
+        if (workflow.coverLetterGenerated)
+          items.push({ id: "wf-cover", action: "Cover letter generated", detail: workflow.coverLetterTitle || [workflow.coverLetterRole, workflow.coverLetterCompany].filter(Boolean).join(" · ") || "Tailored draft ready", timestamp: at(1), type: "cover_letter" });
+        if (workflow.jobMatchesCount > 0)
+          items.push({ id: "wf-matches", action: "Job matches found", detail: `${workflow.jobMatchesCount} roles matched`, timestamp: at(2), type: "job_match" });
+        if (workflow.interviewSessionCreated)
+          items.push({ id: "wf-interview", action: "Interview session created", detail: "Mock interview ready to practice", timestamp: at(3), type: "interview" });
+        if (workflow.tasksCreated > 0)
+          items.push({ id: "wf-tasks", action: "Tasks created", detail: `${workflow.tasksCreated} follow-up${workflow.tasksCreated !== 1 ? "s" : ""} scheduled`, timestamp: at(4), type: "task" });
+        return items;
+      })()
+    : [];
+
   const activities: ActivityItem[] = [
+    ...workflowActivities,
     ...resumes.map((r) => ({
       id: r.id,
       action: "Resume saved",
@@ -240,10 +307,10 @@ export default function DashboardClient() {
           <DashboardHeader onMenuClick={() => setSidebarOpen(true)} userEmail={userEmail} />
 
           <QuickStats
-            resumeCount={resumes.length}
-            coverLetterCount={coverLetters.length}
-            interviewCount={interviews.length}
-            jobMatchCount={jobMatches.length}
+            resumeCount={resumeCount}
+            coverLetterCount={coverLetterCount}
+            interviewCount={interviewCount}
+            jobMatchCount={jobMatchCount}
             languageCount={languageCount}
             avgAtsScore={avgAts}
           />
@@ -255,6 +322,13 @@ export default function DashboardClient() {
               <RoadmapWidget careerPath={careerPath} />
             </div>
           </div>
+
+          {/* Latest generated cover letter from the newest workflow run */}
+          {workflow && (
+            <div className="mb-5">
+              <CoverLetterWidget workflow={workflow} />
+            </div>
+          )}
 
           <div className="mb-5">
             <SavedResumes

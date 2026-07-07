@@ -219,7 +219,7 @@ export default function ResumeForm({ formData, onChange }: ResumeFormProps) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {(
             [
-              ["fullName",  "Full name",       "Alexandra Chen"],
+              ["fullName",  "Full name",       "Your full name"],
               ["jobTitle",  "Job title",        "Senior Product Designer"],
               ["email",     "Email address",    "alex@email.com"],
               ["phone",     "Phone number",     "+1 (415) 555-0182"],

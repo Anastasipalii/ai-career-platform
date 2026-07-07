@@ -43,7 +43,7 @@ const ORIGINAL_SECTIONS: SectionLabels = {
 const ORIGINAL_EXPERIENCE: ExperienceEntry[] = [
   {
     role: "Senior Product Designer",
-    company: "Vercel",
+    company: "Technology Company",
     period: "Mar 2022 – Present",
     bullets: [
       "Led redesign of developer dashboard, improving onboarding by 40%",
@@ -53,7 +53,7 @@ const ORIGINAL_EXPERIENCE: ExperienceEntry[] = [
   },
   {
     role: "Product Designer",
-    company: "Linear",
+    company: "Software Startup",
     period: "Jun 2020 – Feb 2022",
     bullets: [
       "Designed core issue tracking and project management workflows",
@@ -729,9 +729,9 @@ export default function TranslationPreview({ state, translated, aiTranslation }:
           <ResumeCard
             label={`Original · ${state.sourceLanguage}`}
             accentColor="#374151"
-            name="Alexandra Chen"
+            name="Your Name"
             jobTitle={ORIGINAL_EXPERIENCE[0].role}
-            contact="alex.chen@email.com  ·  +1 (415) 555-0182  ·  San Francisco, CA"
+            contact="you@email.com  ·  +1 (555) 000-0000  ·  Your City"
             sections={ORIGINAL_SECTIONS}
             summary={ORIGINAL_SUMMARY}
             experience={ORIGINAL_EXPERIENCE}
@@ -780,9 +780,9 @@ export default function TranslationPreview({ state, translated, aiTranslation }:
             <ResumeCard
               label={`Translated · ${state.targetLanguage}`}
               accentColor="#059669"
-              name="Alexandra Chen"
+              name="Your Name"
               jobTitle={translated ? translatedTitle : ORIGINAL_EXPERIENCE[0].role}
-              contact="alex.chen@email.com  ·  +1 (415) 555-0182  ·  San Francisco, CA"
+              contact="you@email.com  ·  +1 (555) 000-0000  ·  Your City"
               sections={translated ? translatedSections : ORIGINAL_SECTIONS}
               summary={translated ? translatedSummary : ORIGINAL_SUMMARY}
               experience={translated ? translatedExp : ORIGINAL_EXPERIENCE}

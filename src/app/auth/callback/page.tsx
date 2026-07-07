@@ -8,19 +8,50 @@ export default function AuthCallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.replace("/dashboard");
-      } else {
-        // Listen for the auth state change triggered by the OAuth token in the URL hash
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
-          if (sess) {
-            subscription.unsubscribe();
-            router.replace("/dashboard");
-          }
+    let active = true;
+    let subscription: { unsubscribe: () => void } | undefined;
+    let fallback: ReturnType<typeof setTimeout> | undefined;
+
+    // Defer navigation to the next tick so the App Router is fully initialized
+    // before an action is dispatched. Calling router.replace synchronously from
+    // an auth callback (which can fire immediately) triggers
+    // "Router action dispatched before initialization".
+    const go = (path: string) => {
+      if (!active) return;
+      active = false;
+      subscription?.unsubscribe();
+      if (fallback) clearTimeout(fallback);
+      setTimeout(() => router.replace(path), 0);
+    };
+
+    (async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (session) {
+          go("/dashboard");
+          return;
+        }
+
+        // Wait for the auth state change triggered by the OAuth token in the URL.
+        const { data } = supabase.auth.onAuthStateChange((_event, sess) => {
+          if (sess) go("/dashboard");
         });
+        subscription = data.subscription;
+
+        // Fail safe: if no session materializes, send the user to /login
+        // instead of hanging on the spinner forever.
+        fallback = setTimeout(() => go("/login"), 8000);
+      } catch {
+        go("/login");
       }
-    });
+    })();
+
+    return () => {
+      active = false;
+      subscription?.unsubscribe();
+      if (fallback) clearTimeout(fallback);
+    };
   }, [router]);
 
   return (

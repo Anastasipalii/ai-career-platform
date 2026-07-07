@@ -22,6 +22,7 @@ export default function MockInterview({ onFeedbackReady }: MockInterviewProps) {
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSeconds(0);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };

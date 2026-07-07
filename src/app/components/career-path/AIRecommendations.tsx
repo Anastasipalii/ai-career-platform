@@ -70,7 +70,7 @@ const recs: Rec[] = [
       </svg>
     ),
     title: "Resume Improvements",
-    body: "Add metrics to 3 more bullet points. Your Vercel work is strong but \"built design system\" needs to become \"built design system used by 12 teams, reducing handoff time by 60%.\" Specificity wins.",
+    body: "Add metrics to 3 more bullet points. Your recent design-system work is strong but \"built design system\" needs to become \"built design system used by 12 teams, reducing handoff time by 60%.\" Specificity wins.",
     color: "#10b981",
     bg: "rgba(16,185,129,0.1)",
     border: "rgba(16,185,129,0.2)",

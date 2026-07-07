@@ -122,6 +122,30 @@ export default function FeedbackPanel({ data, questionText }: FeedbackPanelProps
           </div>
         </div>
 
+        {/* Strengths */}
+        {data.strengths && data.strengths.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2.5">
+              Strengths
+            </p>
+            <ul className="flex flex-col gap-2">
+              {data.strengths.map((s) => (
+                <li key={s} className="flex items-start gap-2 text-xs text-slate-500">
+                  <span
+                    className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+                    style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.2)" }}
+                  >
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                      <path d="M1.5 5.2 4 7l4.5-5" stroke="#34d399" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  {s}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Mistakes */}
         <div>
           <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2.5">

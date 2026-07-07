@@ -45,6 +45,17 @@ const TYPE_CONFIG: Record<
       </svg>
     ),
   },
+  task: {
+    color: "#ec4899",
+    bg: "rgba(236,72,153,0.1)",
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 2.5H3.5a1 1 0 00-1 1v8a1 1 0 001 1h7a1 1 0 001-1v-8a1 1 0 00-1-1H9" />
+        <rect x="5" y="1.5" width="4" height="2" rx="0.5" />
+        <path d="M5 7l1.5 1.5L9 6" />
+      </svg>
+    ),
+  },
 };
 
 interface RecentActivityProps {

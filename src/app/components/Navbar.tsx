@@ -82,6 +82,7 @@ type NavLink =
 
 const NAV_LINKS: NavLink[] = [
   { label: "Features",  type: "anchor", id: "features" },
+  { label: "Workflow",  type: "page",   href: "/ai-workflow" },
   { label: "Pricing",   type: "anchor", id: "pricing" },
   { label: "About",     type: "anchor", id: "about" },
   { label: "Dashboard", type: "page",   href: "/dashboard" },
@@ -114,7 +115,7 @@ export default function Navbar() {
     if (pathname === "/") {
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
     } else {
-      window.location.href = `/#${id}`;
+      window.location.assign(`/#${id}`);
     }
   };
 

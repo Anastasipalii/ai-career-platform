@@ -648,7 +648,7 @@ export default function InterviewClient() {
                     </svg>
                   </div>
                   <h2 className="text-xl font-bold text-white mb-1">Interview Complete!</h2>
-                  <p className="text-slate-400 text-sm">Great work — here's how you did</p>
+                  <p className="text-slate-400 text-sm">Great work — here&apos;s how you did</p>
                 </div>
 
                 {/* Stats */}

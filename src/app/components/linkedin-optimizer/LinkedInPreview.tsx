@@ -62,7 +62,7 @@ function Avatar({ name }: { name: string }) {
 }
 
 export default function LinkedInPreview({ formData, optimized, aiHeadline, aiAbout, aiSkills }: LinkedInPreviewProps) {
-  const name     = formData.fullName    || "Alexandra Chen";
+  const name     = formData.fullName    || "Your Name";
   const role     = formData.currentRole || "Senior Product Designer";
   const headline = aiHeadline ?? (optimized ? TONE_HEADLINES[formData.tone] : (formData.headline || TONE_HEADLINES["Professional"]));
   const about    = aiAbout    ?? (optimized ? TONE_ABOUT[formData.tone]    : (formData.about    || TONE_ABOUT["Professional"]));

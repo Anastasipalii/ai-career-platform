@@ -13,15 +13,15 @@ import TranslationExport from "@/app/components/resume-translation/TranslationEx
 import TranslationAIFeatures from "@/app/components/resume-translation/TranslationAIFeatures";
 
 // Sample resume text used when no file is uploaded
-const SAMPLE_RESUME_TEXT = `Senior Product Designer with 6+ years of experience building AI-powered digital products at scale. Led design systems and zero-to-one products at Vercel and Linear, driving measurable improvements in user onboarding and engagement.
+const SAMPLE_RESUME_TEXT = `Senior Product Designer with 6+ years of experience building AI-powered digital products at scale. Led design systems and zero-to-one products at leading technology companies, driving measurable improvements in user onboarding and engagement.
 
 Experience:
-Senior Product Designer at Vercel (Mar 2022–Present)
+Senior Product Designer at a Technology Company (Mar 2022–Present)
 - Led redesign of developer dashboard, improving onboarding by 40%
 - Built design system used across 12 product surfaces
 - Drove 34% increase in deployment success rate through UX improvements
 
-Product Designer at Linear (Jun 2020–Feb 2022)
+Product Designer at a Software Startup (Jun 2020–Feb 2022)
 - Designed core issue tracking and project management workflows
 - Reduced onboarding time by 40% through progressive disclosure redesign
 - Collaborated with engineering on React component library

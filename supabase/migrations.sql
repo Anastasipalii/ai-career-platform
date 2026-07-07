@@ -330,3 +330,46 @@ drop trigger if exists career_paths_updated_at on public.career_paths;
 create trigger career_paths_updated_at
   before update on public.career_paths
   for each row execute procedure public.handle_updated_at();
+
+
+-- =============================================================
+-- 9. WORKFLOW RUNS
+-- One row per completed AI Workflow run on /ai-workflow. This table is
+-- ADDITIVE — it does not modify any existing table. It stores a single
+-- run summary (real AI analysis + generated cover letter + mock job/
+-- interview data) so the Dashboard can reflect the latest run. When no
+-- session / Supabase is unavailable, the app falls back to localStorage.
+-- =============================================================
+
+create table if not exists public.workflow_runs (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references auth.users (id) on delete cascade,
+  resume_name    text,
+  resume_preview text,
+  analysis       jsonb not null default '{}',
+  ats_score      integer check (ats_score between 0 and 100),
+  cover_letter   jsonb not null default '{}',
+  job_match      jsonb not null default '{}',
+  interview      jsonb not null default '{}',
+  source         text not null default 'demo-fallback',
+  completed_at   timestamptz not null default now(),
+  created_at     timestamptz not null default now()
+);
+
+alter table public.workflow_runs enable row level security;
+
+create policy "workflow_runs: select own"
+  on public.workflow_runs for select
+  using (auth.uid() = user_id);
+
+create policy "workflow_runs: insert own"
+  on public.workflow_runs for insert
+  with check (auth.uid() = user_id);
+
+create policy "workflow_runs: update own"
+  on public.workflow_runs for update
+  using (auth.uid() = user_id);
+
+create policy "workflow_runs: delete own"
+  on public.workflow_runs for delete
+  using (auth.uid() = user_id);

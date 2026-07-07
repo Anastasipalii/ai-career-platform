@@ -16,6 +16,7 @@ interface FeedbackResult {
   structure: number;
   improvedAnswer: string;
   keywords: string[];
+  strengths: string[];
   mistakes: string[];
   error?: string;
 }
@@ -60,6 +61,7 @@ Return JSON with exactly these keys:
   "structure":     <integer 0-100, how well the answer uses STAR or similar framework>,
   "improvedAnswer": "<a rewritten, stronger version of the answer in 3-5 sentences>",
   "keywords":      ["<3-5 relevant keywords/phrases the answer should include>"],
+  "strengths":     ["<2-3 specific things the answer did well>"],
   "mistakes":      ["<2-3 specific things to avoid or improve>"]
 }
 

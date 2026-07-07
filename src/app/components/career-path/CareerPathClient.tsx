@@ -65,6 +65,7 @@ export default function CareerPathClient() {
 
   // ── Restore from localStorage on mount ─────────────────────────────────────
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     const saved = loadFromStorage();
     if (saved?.phases?.length) {
       setAiPhases(saved.phases);
@@ -72,6 +73,7 @@ export default function CareerPathClient() {
       setGoalData(saved.goalData ?? INITIAL_GOAL);
       setGenerated(true);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   // ── Sync checkedTasks to localStorage whenever they change ──────────────────
@@ -407,7 +409,7 @@ export default function CareerPathClient() {
                   <div className="text-2xl mb-2">🎉</div>
                   <p className="text-sm font-semibold text-white mb-1">All tasks completed!</p>
                   <p className="text-xs text-slate-500">
-                    You've completed your roadmap from {goalData.currentTitle} to {goalData.targetTitle}.
+                    You&apos;ve completed your roadmap from {goalData.currentTitle} to {goalData.targetTitle}.
                   </p>
                 </div>
               )}

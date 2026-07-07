@@ -87,6 +87,8 @@ export interface FeedbackData {
   improvedAnswer: string;
   keywords: string[];
   mistakes: string[];
+  /** Optional — what the answer did well (added additively). */
+  strengths?: string[];
 }
 
 export const SENIORITY_LEVELS: SeniorityLevel[] = [

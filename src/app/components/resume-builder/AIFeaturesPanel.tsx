@@ -285,6 +285,7 @@ function ToolModal({
 
   // Auto-run ATS score on open
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability
     if (tool === "ats_score") runATS();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

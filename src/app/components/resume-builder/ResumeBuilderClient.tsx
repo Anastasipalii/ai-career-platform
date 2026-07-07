@@ -55,16 +55,16 @@ function isTemplateKey(s: string | null): s is TemplateKey {
 
 // ── Initial data ─────────────────────────────────────────────────────────────
 const INITIAL_FORM_DATA: ResumeFormData = {
-  fullName: "Alexandra Chen",
-  jobTitle: "Senior Product Designer",
-  email: "alex.chen@email.com",
-  phone: "+1 (415) 555-0182",
-  location: "San Francisco, CA",
-  website: "alexchen.design",
-  linkedin: "linkedin.com/in/alexchen",
+  fullName: "Your Name",
+  jobTitle: "Your Job Title",
+  email: "you@email.com",
+  phone: "+1 (555) 000-0000",
+  location: "Your City",
+  website: "yourwebsite.com",
+  linkedin: "linkedin.com/in/yourname",
   photoUrl: "",
   summary:
-    "Senior Product Designer with 6+ years crafting AI-powered products at scale. Led design systems and zero-to-one products at Vercel and Linear. Passionate about accessibility, data-driven UX, and building design infrastructure that ships fast.",
+    "Experienced professional with a track record of delivering measurable results. Led key initiatives end to end across multiple teams. Passionate about accessibility, data-driven decisions, and building work that ships fast.",
   skills: ["Figma", "UX Research", "Design Systems", "Prototyping", "AI/ML Products", "React", "Accessibility", "A/B Testing"],
   experience: [
     { id: "exp-1", company: "Vercel", role: "Senior Product Designer", startDate: "Mar 2022", endDate: "Present",

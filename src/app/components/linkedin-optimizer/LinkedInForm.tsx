@@ -135,7 +135,7 @@ export default function LinkedInForm({
             <label className="block text-xs text-slate-500 mb-1.5">Full name</label>
             <input
               className={inputCls}
-              placeholder="Alexandra Chen"
+              placeholder="Your full name"
               value={formData.fullName}
               onChange={(e) => set("fullName", e.target.value)}
             />
