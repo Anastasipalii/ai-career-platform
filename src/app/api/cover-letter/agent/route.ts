@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
+import { LANGUAGE_RULE_RESUME } from "@/lib/promptLanguage";
 
 // ============================================================================
 // Cover Letter Agent — real, personalized cover-letter generation (JSON).
@@ -92,9 +93,12 @@ export async function POST(req: NextRequest) {
     (tailored
       ? "Tailor the letter specifically to the provided job description, mirroring its priorities and keywords honestly. "
       : "No job description was provided, so write a strong professional general-purpose cover letter based on the candidate's experience. ") +
+    "Draw on the resume's skills, work experience, technologies, education, achievements, strengths, and ATS keywords — reflect the real resume, never generic placeholder text. " +
+    "SUMMARIZE the candidate professionally in your own words. NEVER copy resume text verbatim and NEVER include contact information (email, phone, address, links), resume section headings, bulleted skill/certification lists, or raw education blocks in the letter — weave the relevant facts into natural prose instead. " +
     "Do NOT invent an employer/company name, do NOT invent metrics that aren't supported by the resume, and do NOT use bracketed placeholders like [Company] or [Your Name]. " +
     "If the candidate's name is clearly present in the resume, sign off with it; otherwise end with just 'Sincerely,' and no name. " +
-    "The letter must be substantial and professional — 400 to 600 words, with a clear opening, two to three strong body paragraphs that reference specific experience from the resume, and a confident closing. Return ONLY valid JSON — no markdown, no extra text.";
+    "The letter must be substantial and professional — 400 to 700 words — and follow this structure: greeting; an opening paragraph; a paragraph on professional experience; a paragraph on relevant skills and technologies; a paragraph on why this company/role; a paragraph on why the candidate is a strong fit; and a confident professional closing. Return ONLY valid JSON — no markdown, no extra text.\n\n" +
+    LANGUAGE_RULE_RESUME;
 
   const contextParts: string[] = [];
   if (body.analysis?.experienceSummary) contextParts.push(`Experience summary: ${body.analysis.experienceSummary}`);
@@ -108,7 +112,7 @@ export async function POST(req: NextRequest) {
     `Return JSON with EXACTLY this shape:\n` +
     `{\n` +
     `  "title": "<short title, e.g. 'Cover Letter — <role>' if a role is clear, else 'Professional Cover Letter'; do not include a fake company>",\n` +
-    `  "coverLetter": "<the full letter, 400-600 words, greeting + 3-4 substantial paragraphs grounded in the resume + sign-off, using \\n for line breaks>",\n` +
+    `  "coverLetter": "<the full letter, 400-700 words: greeting, opening, professional experience, relevant skills & technologies, why this company/role, why a strong fit, professional closing — all grounded in the resume, using \\n for line breaks>",\n` +
     `  "matchingKeywords": ["<4-8 keywords reflected in the letter${tailored ? " that come from the job description" : ""}>"],\n` +
     `  "toneSuggestions": ["<2-3 alternative tones, e.g. Professional, Warm, Confident>"]\n` +
     `}`;

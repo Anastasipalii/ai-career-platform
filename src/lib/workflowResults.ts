@@ -15,11 +15,18 @@ import type { WorkflowJobMatch } from "./workflowRun";
 /** localStorage key for the most recent completed pipeline run. */
 export const WORKFLOW_RESULTS_KEY = "careerai:workflow-results";
 
+/** Event name broadcast whenever a run is saved/cleared, so any open Dashboard
+ *  re-reads the latest run instead of showing a stale first-load snapshot. */
+export const WORKFLOW_UPDATED_EVENT = "careerai:workflow-updated";
+
 /** Where a run's results came from. */
 export type WorkflowResultSource = "live-ai" | "demo-fallback";
 
 /** Summary of one completed pipeline run. */
 export interface WorkflowResults {
+  /** Unique id for this run — stamps every section so the dashboard can prove
+   *  it is showing one fresh run's data, not stale/mixed data. */
+  runId?: string;
   /** The resume was ATS-optimized during the run. */
   resumeOptimized: boolean;
   /** Final ATS score (0–100). */
@@ -51,6 +58,13 @@ export interface WorkflowResults {
   coverLetterText?: string;
   /** Top job matches from the run (so the Dashboard can display them). */
   jobMatches?: WorkflowJobMatch[];
+  /** Generated interview questions from the run. */
+  interviewQuestions?: string[];
+  // ── Analysis essentials (for the resume-based Career Roadmap / Next Steps) ──
+  detectedSkills?: string[];
+  missingSkills?: string[];
+  strengths?: string[];
+  recommendations?: string[];
 }
 
 /** True only in a browser with a usable localStorage. */
@@ -63,6 +77,9 @@ export function saveWorkflowResults(results: WorkflowResults): void {
   if (!hasStorage()) return;
   try {
     window.localStorage.setItem(WORKFLOW_RESULTS_KEY, JSON.stringify(results));
+    // Notify any open Dashboard to re-read immediately (same-tab; the native
+    // `storage` event only fires across tabs).
+    window.dispatchEvent(new CustomEvent(WORKFLOW_UPDATED_EVENT));
   } catch {
     // Storage unavailable (private mode, quota) — non-fatal for a demo.
   }
@@ -78,6 +95,7 @@ export function readWorkflowResults(): WorkflowResults | null {
     // Minimal shape validation — ignore anything malformed.
     if (typeof parsed?.completedAt !== "string") return null;
     return {
+      runId: parsed.runId,
       resumeOptimized: Boolean(parsed.resumeOptimized),
       atsScore: Number(parsed.atsScore ?? 0),
       coverLetterGenerated: Boolean(parsed.coverLetterGenerated),
@@ -93,6 +111,13 @@ export function readWorkflowResults(): WorkflowResults | null {
       coverLetterTitle: parsed.coverLetterTitle,
       coverLetterText: parsed.coverLetterText,
       jobMatches: Array.isArray(parsed.jobMatches) ? parsed.jobMatches : undefined,
+      interviewQuestions: Array.isArray(parsed.interviewQuestions)
+        ? parsed.interviewQuestions.filter((q): q is string => typeof q === "string")
+        : undefined,
+      detectedSkills: Array.isArray(parsed.detectedSkills) ? parsed.detectedSkills : undefined,
+      missingSkills: Array.isArray(parsed.missingSkills) ? parsed.missingSkills : undefined,
+      strengths: Array.isArray(parsed.strengths) ? parsed.strengths : undefined,
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : undefined,
     };
   } catch {
     return null;
@@ -104,6 +129,7 @@ export function clearWorkflowResults(): void {
   if (!hasStorage()) return;
   try {
     window.localStorage.removeItem(WORKFLOW_RESULTS_KEY);
+    window.dispatchEvent(new CustomEvent(WORKFLOW_UPDATED_EVENT));
   } catch {
     // ignore
   }

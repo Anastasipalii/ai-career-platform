@@ -1,5 +1,9 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
+import { withRetryOn429 } from "@/lib/openaiRetry";
+import { analyzeResumeLocally, matchJobsLocally } from "@/lib/localResumeFallback";
+import type { ResumeAnalysis } from "@/lib/workflowRun";
+import { LANGUAGE_RULE_RESUME } from "@/lib/promptLanguage";
 
 // ============================================================================
 // Job Matching Agent — real, resume-driven job match recommendations (JSON).
@@ -15,11 +19,8 @@ interface AgentBody {
   resumeText?: string;
   jobDescription?: string;
   targetRole?: string;
-  analysis?: {
-    detectedSkills?: string[];
-    experienceSummary?: string;
-    missingSkills?: string[];
-  };
+  // The client passes the full master analysis; only a subset is needed here.
+  analysis?: Partial<ResumeAnalysis>;
 }
 
 interface JobMatch {
@@ -32,29 +33,10 @@ interface JobMatch {
 
 type Source = "live-ai" | "demo-fallback";
 
-const DEMO_MATCHES: JobMatch[] = [
-  {
-    title: "Senior Frontend Engineer",
-    matchScore: 91,
-    whyMatch: "Strong overlap on core UI engineering and performance work.",
-    missingSkills: ["System design", "GraphQL"],
-    recommendedSkills: ["Design systems at scale", "Web performance profiling"],
-  },
-  {
-    title: "Full-Stack Engineer",
-    matchScore: 84,
-    whyMatch: "Frontend depth plus API experience maps well to full-stack roles.",
-    missingSkills: ["Cloud deployment", "CI/CD pipelines"],
-    recommendedSkills: ["Node.js services", "Docker & CI basics"],
-  },
-  {
-    title: "Product Engineer",
-    matchScore: 79,
-    whyMatch: "Bias for measurable impact and iterative shipping fits product teams.",
-    missingSkills: ["Experimentation / A-B testing"],
-    recommendedSkills: ["Analytics instrumentation", "Feature-flagging"],
-  },
-];
+// No hardcoded profession-specific demo. When AI is unavailable we return an
+// empty set rather than leaking a field (e.g. frontend) that may not match the
+// candidate. All real matches come from the resume-driven AI call below.
+const DEMO_MATCHES: JobMatch[] = [];
 
 const clampScore = (n: unknown): number => {
   const v = Math.round(Number(n));
@@ -78,20 +60,47 @@ export async function POST(req: NextRequest) {
   const targetRole = (body.targetRole ?? "").trim();
   const skills = body.analysis?.detectedSkills ?? [];
 
-  // Nothing to reason from → demo recommendations, flagged.
+  // Resume-based local job matches — used ONLY when the live model is
+  // unavailable. Prefers the master analysis the client already passed (so the
+  // detected profession drives the roles); otherwise re-derives it locally from
+  // the resume text. Never returns an empty set for a real resume.
+  const localMatches = (reason: string) => {
+    const analysis: ResumeAnalysis =
+      body.analysis && (body.analysis as ResumeAnalysis).profession
+        ? (body.analysis as ResumeAnalysis)
+        : analyzeResumeLocally(resumeText, jobDescription);
+    const matches: JobMatch[] = matchJobsLocally(analysis).map((m) => ({
+      title: m.title,
+      matchScore: m.matchScore,
+      whyMatch: m.whyMatch,
+      missingSkills: m.missingSkills,
+      recommendedSkills: m.recommendedSkills,
+    }));
+    console.log(
+      "[CareerAI] fallback mode because OpenAI", reason,
+      "| profession:", analysis.profession,
+      "| matches:", matches.length
+    );
+    return json("demo-fallback", matches);
+  };
+
+  // Nothing to reason from → empty (no resume/role/skills at all).
   if (!resumeText && !jobDescription && !targetRole && skills.length === 0) {
     return json("demo-fallback", DEMO_MATCHES);
   }
   if (!process.env.OPENAI_API_KEY) {
-    return json("demo-fallback", DEMO_MATCHES);
+    return localMatches("key missing");
   }
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   const system =
-    "You are a career job-matching assistant. From the candidate's resume, recommend the top 3 " +
-    "role TYPES that best fit their experience. Do NOT invent specific employer/company names. " +
-    "Be honest about gaps. Return ONLY valid JSON — no markdown, no extra text.";
+    "You are a career job-matching assistant. From the candidate's resume, recommend the 6 to 8 " +
+    "role TYPES that best fit their experience, ordered by fit. Each reason must be specific to the " +
+    "candidate's actual skills and experience — no generic wording, and vary the phrasing across roles. " +
+    "Do NOT invent specific employer/company names. Be honest about gaps. " +
+    "Return ONLY valid JSON — no markdown, no extra text.\n\n" +
+    LANGUAGE_RULE_RESUME;
 
   const parts: string[] = [];
   if (targetRole) parts.push(`Anchor the matches around this target role and closely related roles: ${targetRole}`);
@@ -108,31 +117,33 @@ Return JSON with EXACTLY this shape:
     {
       "title": "<role title, no company>",
       "matchScore": <integer 0-100>,
-      "whyMatch": "<one sentence on why this role fits the candidate>",
+      "whyMatch": "<a specific one-sentence reason grounded in the candidate's real skills/experience>",
       "missingSkills": ["<1-3 skills the role expects that are weak/absent>"],
       "recommendedSkills": ["<1-3 skills to learn next to strengthen this match>"]
     }
   ]
 }
-Return exactly 3 matches, ordered by matchScore descending.`;
+Return 6 to 8 matches, ordered by matchScore descending.`;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.5,
-    });
+    const completion = await withRetryOn429(() =>
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.5,
+      })
+    );
 
     const raw = completion.choices[0]?.message?.content;
-    if (!raw) return json("demo-fallback", DEMO_MATCHES);
+    if (!raw) return localMatches("returned empty content");
 
     const parsed = JSON.parse(raw) as { matches?: Partial<JobMatch>[] };
     const matches: JobMatch[] = (parsed.matches ?? [])
-      .slice(0, 3)
+      .slice(0, 8)
       .map((m) => ({
         title: m.title?.trim() || "Recommended role",
         matchScore: clampScore(m.matchScore),
@@ -142,9 +153,11 @@ Return exactly 3 matches, ordered by matchScore descending.`;
       }))
       .sort((a, b) => b.matchScore - a.matchScore);
 
-    if (matches.length === 0) return json("demo-fallback", DEMO_MATCHES);
+    if (matches.length === 0) return localMatches("returned no matches");
     return json("live-ai", matches);
-  } catch {
-    return json("demo-fallback", DEMO_MATCHES);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const is429 = /\b429\b|rate limit|quota|too many requests/i.test(msg);
+    return localMatches(is429 ? "429 (rate limit / quota)" : `error: ${msg}`);
   }
 }

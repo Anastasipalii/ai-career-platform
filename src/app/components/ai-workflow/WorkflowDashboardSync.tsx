@@ -102,7 +102,7 @@ export default function WorkflowDashboardSync({ show }: WorkflowDashboardSyncPro
             Synced to your <span className="gradient-text">Dashboard</span>
           </h3>
           <p className="text-slate-500 text-[12.5px]">
-            Every output lands in your personal workspace — illustrative demo data
+            Every output lands in your personal workspace
           </p>
         </div>
       </div>

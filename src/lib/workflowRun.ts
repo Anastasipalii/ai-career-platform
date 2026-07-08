@@ -12,8 +12,17 @@ import { supabase } from "./supabase";
 
 export type ResultSource = "live-ai" | "demo-fallback";
 
-/** Structured resume analysis (mirrors /api/resume/analyze). */
+/** Master resume analysis (mirrors /api/resume/analyze) — the single,
+ *  profession-agnostic source of truth that drives every downstream module. */
 export interface ResumeAnalysis {
+  // Master profile (detected from the resume — never assumed).
+  profession: string;
+  specialization: string;
+  seniority: string;
+  industries: string[];
+  softSkills: string[];
+  careerGoals: string[];
+  // Skills / scoring.
   detectedSkills: string[];
   detectedLanguages: string[];
   experienceSummary: string;
@@ -38,6 +47,8 @@ export interface WorkflowJobMatch {
   company?: string;
   matchScore: number;
   whyMatch: string;
+  /** 2–3 resume strengths this role builds on (optional; local recommendations). */
+  matchedStrengths?: string[];
   missingSkills: string[];
   recommendedSkills: string[];
 }
@@ -121,5 +132,29 @@ export async function readLatestWorkflowRun(): Promise<WorkflowRunRow | null> {
     return data[0] as WorkflowRunRow;
   } catch {
     return null;
+  }
+}
+
+/** Read the most recent runs (newest first) so the Dashboard can show the
+ *  latest run in its widgets while keeping previous runs visible in history.
+ *  Each Run Pipeline is a separate row — this never overwrites earlier runs. */
+export async function readRecentWorkflowRuns(limit = 10): Promise<WorkflowRunRow[]> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return [];
+
+    const { data, error } = await supabase
+      .from("workflow_runs")
+      .select(
+        "resume_name, resume_preview, analysis, ats_score, cover_letter, job_match, interview, source, completed_at"
+      )
+      .eq("user_id", session.user.id)
+      .order("completed_at", { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+    return data as WorkflowRunRow[];
+  } catch {
+    return [];
   }
 }

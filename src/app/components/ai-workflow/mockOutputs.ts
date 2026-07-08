@@ -22,6 +22,8 @@ export interface JobMatch {
   company?: string;
   matchScore: number; // 0–100
   whyMatch: string;
+  /** 2–3 resume strengths this role builds on (optional). */
+  matchedStrengths?: string[];
   missingSkills: string[];
   recommendedSkills: string[];
 }
@@ -43,75 +45,30 @@ export interface WorkflowOutputs {
   interviewQuestions: string[];
 }
 
+// Profession-agnostic scaffold. The only illustrative values are the generic
+// ATS dimension labels and a neutral cover-letter placeholder — nothing here is
+// tied to any field. Every content array is empty: real, resume-driven results
+// fill them in, and the results UI shows a friendly empty state otherwise. This
+// guarantees no hardcoded profession (e.g. frontend) ever leaks into a run.
 export const MOCK_OUTPUTS: WorkflowOutputs = {
   ats: {
-    score: 82,
-    verdict: "Strong — likely to pass most ATS filters",
+    score: 0,
+    verdict: "Run the pipeline with your resume to see your ATS score",
     subScores: [
-      { label: "Keyword match", score: 88 },
-      { label: "Formatting", score: 91 },
-      { label: "Impact & metrics", score: 74 },
-      { label: "Readability", score: 79 },
+      { label: "Keyword match", score: 0 },
+      { label: "Formatting", score: 0 },
+      { label: "Impact & metrics", score: 0 },
+      { label: "Readability", score: 0 },
     ],
   },
-  missingSkills: [
-    "Kubernetes",
-    "GraphQL",
-    "CI/CD pipelines",
-    "System design",
-    "Terraform",
-  ],
-  resumeBullets: [
-    {
-      before: "Responsible for the team's frontend work and some features.",
-      after:
-        "Led frontend delivery for a 5-engineer team, shipping 12 features that lifted activation 23% quarter-over-quarter.",
-    },
-    {
-      before: "Helped improve the performance of the web app.",
-      after:
-        "Cut initial load time 3.4s → 1.1s by code-splitting and image optimization, improving Lighthouse score to 98.",
-    },
-    {
-      before: "Worked on the API and fixed bugs.",
-      after:
-        "Designed and shipped 9 REST endpoints and resolved 40+ production issues, reducing error rate by 62%.",
-    },
-  ],
+  missingSkills: [],
+  resumeBullets: [],
   coverLetter: {
     role: "",
     company: "",
     preview:
-      "Dear Hiring Manager,\n\nI'm excited to apply for this role. Over the past few years I've focused on building fast, accessible products and leading delivery for a growing team — taking initiatives from scoping through to measurable impact.\n\nI'd welcome the chance to bring that same focus and reliability to your team, and I'd love to discuss how my experience aligns with what you're looking for.\n\nSincerely,",
+      "Upload or paste your resume and run the pipeline to generate a personalized, resume-based cover letter here. This placeholder appears only when no resume has been provided yet.",
   },
-  jobMatches: [
-    {
-      title: "Senior Frontend Engineer",
-      matchScore: 91,
-      whyMatch: "Strong overlap on React, TypeScript, and UI performance — the core of the role.",
-      missingSkills: ["System design", "GraphQL"],
-      recommendedSkills: ["Design systems at scale", "Web performance profiling"],
-    },
-    {
-      title: "Full-Stack Engineer",
-      matchScore: 84,
-      whyMatch: "Solid frontend foundation plus API experience maps well to full-stack work.",
-      missingSkills: ["Cloud deployment", "CI/CD pipelines"],
-      recommendedSkills: ["Node.js services", "Docker & CI basics"],
-    },
-    {
-      title: "Product Engineer",
-      matchScore: 79,
-      whyMatch: "Bias for measurable impact and shipping iteratively fits product-focused teams.",
-      missingSkills: ["Experimentation / A-B testing"],
-      recommendedSkills: ["Analytics instrumentation", "Feature-flagging"],
-    },
-  ],
-  interviewQuestions: [
-    "Walk me through how you'd architect a design system consumed by multiple product teams.",
-    "Describe a time you improved a critical performance metric — what did you measure and change?",
-    "How do you approach accessibility when a deadline is tight?",
-    "Tell me about a disagreement with a designer or PM and how you resolved it.",
-    "How would you debug a memory leak in a long-lived single-page app?",
-  ],
+  jobMatches: [],
+  interviewQuestions: [],
 };

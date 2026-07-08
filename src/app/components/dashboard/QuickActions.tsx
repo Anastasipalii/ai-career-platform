@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText, Mail, Mic, Languages, Search, Network } from "lucide-react";
+import { FileText, Mail, Mic, Languages, Search, Network, TrendingUp } from "lucide-react";
 import { ReactNode } from "react";
 
 interface Action {
@@ -59,6 +59,14 @@ const actions: Action[] = [
     color: "#0a66c2",
     bg: "rgba(10,102,194,0.1)",
     border: "rgba(10,102,194,0.2)",
+  },
+  {
+    label: "Career Roadmap",
+    href: "/career-path",
+    icon: <TrendingUp size={20} />,
+    color: "#ec4899",
+    bg: "rgba(236,72,153,0.1)",
+    border: "rgba(236,72,153,0.2)",
   },
 ];
 

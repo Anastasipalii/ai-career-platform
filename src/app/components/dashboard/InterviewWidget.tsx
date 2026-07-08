@@ -4,6 +4,8 @@ import { InterviewRow } from "@/app/components/dashboard/DashboardClient";
 interface InterviewWidgetProps {
   sessions: InterviewRow[];
   formatRelative: (iso: string) => string;
+  /** Generated interview questions from the latest workflow run. */
+  questions?: string[];
 }
 
 function scoreColor(n: number) {
@@ -12,8 +14,9 @@ function scoreColor(n: number) {
   return "#ef4444";
 }
 
-export default function InterviewWidget({ sessions, formatRelative }: InterviewWidgetProps) {
+export default function InterviewWidget({ sessions, formatRelative, questions }: InterviewWidgetProps) {
   const recent = sessions.slice(0, 3);
+  const generatedQuestions = (questions ?? []).slice(0, 15);
 
   return (
     <div
@@ -30,7 +33,7 @@ export default function InterviewWidget({ sessions, formatRelative }: InterviewW
         </Link>
       </div>
 
-      {recent.length === 0 ? (
+      {generatedQuestions.length === 0 && recent.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 px-5 text-center">
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
@@ -51,6 +54,34 @@ export default function InterviewWidget({ sessions, formatRelative }: InterviewW
             style={{ background: "rgba(245,158,11,0.12)", color: "#fcd34d", border: "1px solid rgba(245,158,11,0.2)" }}
           >
             Start practising
+          </Link>
+        </div>
+      ) : generatedQuestions.length > 0 ? (
+        <div className="p-4 flex flex-col gap-2.5">
+          {generatedQuestions.map((q, i) => (
+            <div
+              key={i}
+              className="rounded-xl p-3.5 border flex items-start gap-3"
+              style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
+            >
+              <span
+                className="shrink-0 w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-semibold mt-0.5"
+                style={{ background: "rgba(245,158,11,0.14)", color: "#fcd34d", border: "1px solid rgba(245,158,11,0.28)" }}
+              >
+                {i + 1}
+              </span>
+              <span className="text-xs text-slate-300 leading-relaxed">{q}</span>
+            </div>
+          ))}
+          <Link
+            href="/interview-coach"
+            className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 hover:opacity-90"
+            style={{ background: "rgba(245,158,11,0.1)", color: "#fcd34d", border: "1px solid rgba(245,158,11,0.2)" }}
+          >
+            Practice these questions
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6h8M6.5 2.5L10 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </Link>
         </div>
       ) : (

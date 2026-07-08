@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import {
   FileText, Mail, Network, Languages, Mic,
   Search, TrendingUp, ChevronDown, Menu, X,
@@ -95,6 +96,10 @@ export default function Navbar() {
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Auth state: null = still checking, true/false = resolved. Read the current
+  // Supabase session on mount and stay in sync with sign-in / sign-out events.
+  const [authed, setAuthed] = useState<boolean | null>(null);
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -104,6 +109,26 @@ export default function Navbar() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    supabase.auth
+      .getSession()
+      .then(({ data }) => { if (active) setAuthed(!!data.session); })
+      .catch(() => { if (active) setAuthed(false); });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthed(!!session);
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    closeAll();
+    await supabase.auth.signOut(); // onAuthStateChange updates the header immediately
+  };
 
   const closeAll = () => {
     setMobileOpen(false);
@@ -236,16 +261,29 @@ export default function Navbar() {
 
           {/* ── Desktop CTAs ── */}
           <div className="hidden md:flex items-center gap-2 shrink-0 ml-auto">
-            <Link href="/login" className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors">
-              Sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02]"
-              style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
-            >
-              Get started free
-            </Link>
+            {authed === null ? null : authed ? (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02]"
+                style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
+              >
+                Log out
+              </button>
+            ) : (
+              <>
+                <Link href="/login" className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                  Sign in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02]"
+                  style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
+                >
+                  Get started free
+                </Link>
+              </>
+            )}
           </div>
 
           {/* ── Mobile hamburger ── */}
@@ -325,21 +363,34 @@ export default function Navbar() {
             )}
 
             <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-white/[0.06]">
-              <Link
-                href="/login"
-                onClick={closeAll}
-                className="w-full text-center py-2.5 rounded-xl text-sm font-medium text-slate-300 border border-white/[0.09] hover:border-white/20 hover:text-white transition-all"
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/signup"
-                onClick={closeAll}
-                className="w-full text-center py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
-                style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
-              >
-                Get started free
-              </Link>
+              {authed === null ? null : authed ? (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full text-center py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
+                  style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
+                >
+                  Log out
+                </button>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    onClick={closeAll}
+                    className="w-full text-center py-2.5 rounded-xl text-sm font-medium text-slate-300 border border-white/[0.09] hover:border-white/20 hover:text-white transition-all"
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    href="/signup"
+                    onClick={closeAll}
+                    className="w-full text-center py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
+                    style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
+                  >
+                    Get started free
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

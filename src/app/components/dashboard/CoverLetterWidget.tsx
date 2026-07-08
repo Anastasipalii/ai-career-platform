@@ -4,26 +4,14 @@
 // CoverLetterWidget — shows the latest generated cover letter on the Dashboard
 // ----------------------------------------------------------------------------
 // Reads from the same `workflow` result the Dashboard already loads (Supabase
-// row preferred, else localStorage), so it persists across refresh. Provides a
-// collapsed preview with "View full letter", Copy, and Download PDF. If the run
-// had no real cover letter text, it falls back to a demo letter, clearly marked.
+// row preferred, else localStorage), so it persists across refresh. Renders
+// ONLY when a real generated letter exists — never a placeholder. Provides a
+// collapsed preview with "View full letter", Copy, and Download PDF.
 // Additive card — the existing Dashboard layout is unchanged.
 // ============================================================================
 
 import { useState } from "react";
 import type { WorkflowResults } from "@/lib/workflowResults";
-
-// Shown only when a run produced no cover letter text at all (edge case / old
-// records). New runs always persist their text, including demo-fallback runs.
-const DEMO_COVER_TEXT =
-  "Dear Hiring Manager,\n\n" +
-  "I'm excited to apply for this role. Across my career I've focused on delivering " +
-  "measurable results, collaborating closely with cross-functional partners, and raising " +
-  "the quality bar of the products I work on.\n\n" +
-  "I take ownership of initiatives end to end — scoping the problem, shipping iteratively, " +
-  "and using data to confirm the impact.\n\n" +
-  "I'd welcome the chance to bring that same focus and reliability to your team.\n\n" +
-  "Sincerely,";
 
 function copyText(text: string): Promise<void> {
   if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -63,12 +51,14 @@ export default function CoverLetterWidget({ workflow }: CoverLetterWidgetProps) 
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Only render once a run has generated a cover letter.
-  if (!workflow || !workflow.coverLetterGenerated) return null;
+  // Render ONLY when a real generated cover letter exists — never a placeholder.
+  if (!workflow) return null;
+  const text = workflow.coverLetterText?.trim() ? (workflow.coverLetterText as string) : "";
+  if (!text) return null;
 
-  const hasRealText = Boolean(workflow.coverLetterText && workflow.coverLetterText.trim());
-  const text = hasRealText ? (workflow.coverLetterText as string) : DEMO_COVER_TEXT;
-  const isDemo = workflow.source === "demo-fallback" || !hasRealText;
+  // "Live AI" badge only for a live run. Real generated text is always shown;
+  // no demo/fallback badge is displayed when real workflow data exists.
+  const showLive = workflow.source === "live-ai";
 
   const roleCompany = [workflow.coverLetterRole, workflow.coverLetterCompany]
     .filter(Boolean)
@@ -102,17 +92,15 @@ export default function CoverLetterWidget({ workflow }: CoverLetterWidgetProps) 
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-sm font-semibold text-white">Latest Cover Letter</h2>
-            <span
-              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide"
-              style={
-                isDemo
-                  ? { color: "#fbbf24", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)" }
-                  : { color: "#34d399", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)" }
-              }
-            >
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: isDemo ? "#fbbf24" : "#34d399" }} />
-              {isDemo ? "Demo AI fallback" : "Live AI"}
-            </span>
+            {showLive && (
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide"
+                style={{ color: "#34d399", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)" }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#34d399" }} />
+                Live AI
+              </span>
+            )}
           </div>
           <p className="text-[12px] text-slate-400 mt-1 truncate">{title}</p>
           {roleCompany && <p className="text-[11px] text-slate-600 mt-0.5 truncate">{roleCompany}</p>}

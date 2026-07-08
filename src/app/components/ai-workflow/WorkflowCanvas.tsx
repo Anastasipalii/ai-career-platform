@@ -4,13 +4,14 @@ import { useMemo, useRef, useState } from "react";
 import { FLOW_STEPS, type WorkflowStepStatus } from "./flowSteps";
 import { usePipeline } from "./usePipeline";
 import { MOCK_OUTPUTS, type WorkflowOutputs, type JobMatch } from "./mockOutputs";
-import { saveWorkflowResults } from "@/lib/workflowResults";
+import { saveWorkflowResults, clearWorkflowResults } from "@/lib/workflowResults";
 import {
   saveWorkflowRun,
   type ResultSource,
   type ResumeAnalysis,
   type CoverLetterResult,
 } from "@/lib/workflowRun";
+import { analyzeResumeLocally, matchJobsLocally } from "@/lib/localResumeFallback";
 import ResumeInputPanel from "./ResumeInputPanel";
 import WorkflowNode from "./WorkflowNode";
 import WorkflowConnector from "./WorkflowConnector";
@@ -38,7 +39,7 @@ function mapToOutputs(
   interviewQuestions: string[],
   role: string
 ): WorkflowOutputs {
-  const score = analysis ? clamp100(analysis.atsScore) : MOCK_OUTPUTS.ats.score;
+  const score = analysis ? clamp100(analysis.atsScore) : 0;
   return {
     ats: {
       score,
@@ -50,15 +51,16 @@ function mapToOutputs(
           : "Needs work — optimize before applying",
       subScores: MOCK_OUTPUTS.ats.subScores,
     },
-    missingSkills: analysis?.missingSkills?.length ? analysis.missingSkills : MOCK_OUTPUTS.missingSkills,
-    resumeBullets: MOCK_OUTPUTS.resumeBullets,
+    // Resume-driven only — no hardcoded/profession-specific fallbacks.
+    missingSkills: analysis?.missingSkills ?? [],
+    resumeBullets: [],
     coverLetter: {
       role: role || "",
       company: "",
-      preview: cover?.coverLetter || MOCK_OUTPUTS.coverLetter.preview,
+      preview: cover?.coverLetter ?? "",
     },
-    jobMatches: jobMatches.length ? jobMatches : MOCK_OUTPUTS.jobMatches,
-    interviewQuestions: interviewQuestions.length ? interviewQuestions : MOCK_OUTPUTS.interviewQuestions,
+    jobMatches,
+    interviewQuestions,
   };
 }
 
@@ -96,22 +98,17 @@ function guessCandidateName(resumeText: string): string {
   return looksLikeName ? firstLine : "";
 }
 
-// Infers a target role from the resume text / analysis. Never returns empty —
-// falls back to "Junior Frontend Developer" when nothing can be inferred.
-function inferTargetRole(resumeText: string, analysis: ResumeAnalysis | null): string {
-  const titleRe =
-    /(senior|junior|lead|staff|principal|mid[- ]?level)?\s*(frontend|front-end|backend|back-end|full[- ]?stack|software|web|mobile|data|product|ux|ui|devops|machine learning|ml|ai)\s+(developer|engineer|designer|manager|analyst|scientist)/i;
-  const m = resumeText.match(titleRe);
-  if (m) {
-    return m[0].replace(/\s+/g, " ").trim().replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-  const hay = ((analysis?.detectedSkills ?? []).join(" ") + " " + resumeText).toLowerCase();
-  if (/\breact\b|vue|angular|tailwind|\bcss\b|frontend|front-end/.test(hay)) return "Frontend Developer";
-  if (/node|express|django|flask|\bapi\b|backend|back-end|\bsql\b|postgres/.test(hay)) return "Backend Developer";
-  if (/product manager|roadmap|stakeholder|prioriti/.test(hay)) return "Product Manager";
-  if (/figma|\bux\b|\bui\b|wireframe|prototype/.test(hay)) return "Product Designer";
-  if (/\bdata\b|pandas|machine learning|\bml\b|analytics/.test(hay)) return "Data Analyst";
-  return "Junior Frontend Developer";
+// Derives the target role from the AI-detected master analysis — profession-
+// agnostic (works for any field). Prefers the specific profession/specialization
+// the resume analysis detected; never assumes a hardcoded field.
+function deriveTargetRole(analysis: ResumeAnalysis | null): string {
+  const profession = (analysis?.profession ?? "").trim();
+  const seniority = (analysis?.seniority ?? "").trim();
+  if (!profession) return "";
+  // Prefix the detected seniority (unless junior/entry) — e.g. a Senior <field>.
+  return seniority && !/junior|entry/i.test(seniority)
+    ? `${seniority} ${profession}`.trim()
+    : profession;
 }
 
 // Builds a useful, NON-EMPTY job description from the resume context when the
@@ -138,34 +135,51 @@ function buildJobDescription(
     .join("\n\n");
 }
 
-// Builds a professional cover letter LOCALLY from the actual resume text.
-// Used only when live AI is unavailable but resume text exists — so the letter
-// is grounded in the candidate's own content, never a hardcoded demo.
+
+// Builds a substantial (≈450-550 word), professional cover letter LOCALLY from
+// the actual resume text. Used only when live AI is unavailable but a resume
+// exists — grounded in the candidate's own content (skills detected in the
+// resume, a real excerpt, strengths), never a hardcoded demo.
 function buildLocalCoverLetter(
   resumeText: string,
   role: string,
   analysis: ResumeAnalysis | null
 ): CoverLetterResult {
   const name = guessCandidateName(resumeText);
-  const excerpt = resumeText.replace(/\s+/g, " ").trim().slice(0, 320);
-  const skills = (analysis?.detectedSkills ?? []).slice(0, 6);
+  // Skills come from the master analysis (profession-agnostic) — never from
+  // a hardcoded keyword list, so any field is represented faithfully.
+  const skills = (analysis?.detectedSkills ?? []).slice(0, 8);
   const strengths = (analysis?.strengths ?? []).slice(0, 3);
+  const summary = analysis?.experienceSummary?.trim();
   const targetRole = role && role.trim() ? role : "the role";
+  const primary = skills.slice(0, 4).join(", ");
+
+  // A professionally-worded skills sentence — NEVER raw resume text, headings,
+  // or contact details. Only a natural summary built from detected skills.
+  const skillsSentence = skills.length
+    ? `My experience includes working with ${skills.join(", ")}, along with the modern practices these tools support.`
+    : "My experience spans the practical, hands-on skills my background is built on.";
 
   const body =
     `Dear Hiring Manager,\n\n` +
-    `I am writing to express my strong interest in the ${targetRole} position. ` +
-    `${name ? `My name is ${name}, and ` : ""}I bring a track record of delivering measurable results and ` +
-    `collaborating closely with cross-functional teams, as reflected throughout my resume.\n\n` +
-    (skills.length ? `My core strengths include ${skills.join(", ")}. ` : "") +
-    (strengths.length ? `I've been recognized for ${strengths.join(", ").toLowerCase()}. ` : "") +
-    `A snapshot from my background: ${excerpt}${excerpt.length >= 320 ? "…" : ""}\n\n` +
-    `I take ownership of initiatives end to end — scoping the problem, shipping iteratively, and using data to ` +
-    `confirm the impact. I care about clear communication, pragmatic trade-offs, and raising the quality bar of the ` +
-    `work I touch.\n\n` +
-    `I'm confident my experience maps closely to what this ${targetRole} role requires, and I would welcome the ` +
-    `opportunity to contribute quickly to your team's goals. Thank you for considering my application; I would be ` +
-    `glad to discuss how my background fits what you're looking for.\n\n` +
+    // Opening
+    `I am writing to express my genuine interest in the ${targetRole} position. ` +
+    `${name ? `My name is ${name}, and ` : ""}I believe my background is a strong match` +
+    `${primary ? `, particularly my hands-on work with ${primary}` : ""}.\n\n` +
+    // Professional background — summarized, never verbatim
+    (summary
+      ? `${summary} I focus on turning that experience into reliable, well-crafted work that moves projects forward.\n\n`
+      : `Across my career I've focused on delivering reliable, well-crafted work and steadily taking on more ownership and impact.\n\n`) +
+    // Relevant skills / technologies (professional summary)
+    `${skillsSentence} I apply these day to day to ship maintainable work and to collaborate effectively with designers, engineers, and stakeholders.\n\n` +
+    // Why this candidate fits the role
+    `What makes me a strong fit for a ${targetRole} is the combination of that skill set with how I work: ` +
+    (strengths.length ? `I'm recognized for ${strengths.join(", ").toLowerCase()}, and ` : "") +
+    `I take ownership of problems end to end — scoping them clearly, shipping iteratively, and using results to confirm the impact. ` +
+    `I care about clear communication, pragmatic trade-offs, and raising the quality bar of the work I touch.\n\n` +
+    // Confident closing
+    `I would welcome the opportunity to bring this experience to your team and contribute quickly to your goals. ` +
+    `Thank you for considering my application — I would be glad to discuss in more detail how my background maps to what you're looking for.\n\n` +
     `Sincerely,${name ? `\n${name}` : ""}`;
 
   return {
@@ -176,94 +190,247 @@ function buildLocalCoverLetter(
   };
 }
 
+// Profession-specific interview questions built LOCALLY from the master
+// analysis. Used only when the live interview agent is unavailable (e.g. a 429
+// rate limit) so the pipeline still delivers questions tailored to the detected
+// field — never generic frontend content, never empty when a profession exists.
+function buildLocalInterviewQuestions(analysis: ResumeAnalysis | null, role: string): string[] {
+  const profession = (analysis?.profession ?? "").trim();
+  const spec = (analysis?.specialization ?? "").trim();
+  const skills = analysis?.detectedSkills ?? [];
+  const missing = analysis?.missingSkills ?? [];
+  const soft = analysis?.softSkills ?? [];
+  const field = profession || role || "your field";
+  const [s1, s2, s3] = skills;
+  const m1 = missing[0];
+  const soft1 = soft[0];
+  const title = role || profession || "this role";
+
+  const qs = [
+    `Walk me through your experience as a ${field}${spec ? ` specializing in ${spec}` : ""}.`,
+    `What drew you to this profession, and where do you want to take your career next?`,
+    s1
+      ? `Describe a challenging situation where you applied ${s1}. What was the outcome?`
+      : `Describe the most challenging project you've handled in ${field}.`,
+    s2
+      ? `How do you keep your ${s2} knowledge current as the field evolves?`
+      : `How do you stay current with developments in ${field}?`,
+    s3
+      ? `Give an example of how you used ${s3} to deliver measurable impact.`
+      : `Tell me about a measurable impact you've made in ${field}.`,
+    `Tell me about a time you had to manage competing priorities under a tight deadline.`,
+    soft1
+      ? `Describe a situation that tested your ${soft1.toLowerCase()}.`
+      : `Describe a time you resolved a conflict with a colleague or stakeholder.`,
+    `How do you collaborate with people outside your immediate team or discipline?`,
+    m1
+      ? `This role may involve ${m1}. How would you get up to speed on it?`
+      : `How do you approach learning a skill that is new to you?`,
+    `Tell me about a professional mistake you made and what you learned from it.`,
+    `Where do you see the biggest opportunities or challenges in ${field} today?`,
+    `Why are you the right fit for ${title}?`,
+  ];
+  return qs.filter(Boolean).slice(0, 12);
+}
+
 // Runs the real AI agents from the candidate's own resume (primary context)
 // and an optional job description. Always resolves (never throws) — any failure
 // yields a demo-fallback result so the pipeline UI keeps working.
-async function runRealAI(resumeText: string, jobDescription: string): Promise<AiRunResult> {
+async function runRealAI(
+  resumeText: string,
+  jobDescription: string,
+  runId: string
+): Promise<AiRunResult> {
   const fallback: AiRunResult = {
     source: "demo-fallback",
-    outputs: MOCK_OUTPUTS,
+    // Neutral, profession-agnostic empty outputs — never the frontend demo.
+    outputs: mapToOutputs(null, null, [], [], ""),
     analysis: null,
     cover: null,
   };
-  try {
-    // 1) Resume analysis — only when an actual resume was provided.
-    let analysis: ResumeAnalysis | null = null;
-    let analysisLive = false;
-    if (resumeText) {
-      const aJson = await postJson("/api/resume/analyze", { resumeText });
+  // Each network stage is guarded independently so a failure in a LATER stage
+  // (e.g. a slow interview call hitting the timeout) can never discard an
+  // already-generated cover letter or job matches.
+
+  // 1) Resume analysis — only when an actual resume was provided.
+  let analysis: ResumeAnalysis | null = null;
+  let analysisLive = false;
+  if (resumeText) {
+    try {
+      // Pass the job description into the MASTER analysis so missingSkills /
+      // recommendations are tailored when a JD is present (STEP 5).
+      const aJson = await postJson("/api/resume/analyze", { resumeText, jobDescription });
       analysis = (aJson.data as ResumeAnalysis | undefined) ?? null;
       analysisLive = aJson.source === "live-ai";
+    } catch (e) {
+      console.log(`[CareerAI][${runId}] analyze request failed:`, (e as Error)?.message);
+      analysis = null;
     }
+    // Client-side guarantee: if the API returned no usable analysis (network
+    // failure, empty demo-fallback, or missing profession), derive it LOCALLY
+    // from THIS resume's text. This makes every run resume-specific regardless
+    // of API state — never a shared/stale/empty result.
+    if (!analysis || !analysis.profession) {
+      analysis = analyzeResumeLocally(resumeText, jobDescription);
+      analysisLive = false;
+    }
+    // STEP 2 — detected profession (from live AI or local resume analysis).
+    console.log(
+      `[CareerAI][${runId}] STEP 2 profession:`, analysis.profession,
+      "| specialization:", analysis.specialization || "(none)",
+      "| source:", analysisLive ? "live-ai" : "local",
+      "| atsScore:", analysis.atsScore,
+      "| missingSkills:", analysis.missingSkills.join(", ") || "(none)"
+    );
+  }
 
-    // 2) Target role — always inferred (never empty). Used for job matches,
-    //    the built job description, and interview questions.
-    const inferredRole = inferTargetRole(resumeText, analysis);
+  // 2) Target role — driven ENTIRELY by the detected profession/specialization.
+  //    Empty when nothing was detected (no hardcoded field assumption).
+  const profession = (analysis?.profession ?? "").trim();
+  const targetRole = deriveTargetRole(analysis);
 
-    // 3) Job matches — anchored to a valid target role.
+  // 3) Job matches — anchored to the detected profession (resilient).
+  let matches: JobMatch[] = [];
+  try {
     const jJson = await postJson("/api/job-match/agent", {
       resumeText,
       jobDescription,
-      targetRole: inferredRole,
+      targetRole,
       analysis: analysis ?? undefined,
     });
-    const matches = (jJson.data as { matches?: JobMatch[] } | undefined)?.matches ?? [];
+    matches = (jJson.data as { matches?: JobMatch[] } | undefined)?.matches ?? [];
+  } catch (e) {
+    console.log(`[CareerAI][${runId}] job-match request failed:`, (e as Error)?.message);
+    matches = [];
+  }
+  // Client-side guarantee: if the API produced no matches but we have an
+  // analysis, derive resume-specific matches LOCALLY (profession-appropriate).
+  if (matches.length === 0 && analysis) {
+    matches = matchJobsLocally(analysis).map((m) => ({
+      title: m.title,
+      matchScore: m.matchScore,
+      whyMatch: m.whyMatch,
+      matchedStrengths: m.matchedStrengths,
+      missingSkills: m.missingSkills,
+      recommendedSkills: m.recommendedSkills,
+    }));
+  }
+  // Ensure every match carries 2-3 matched strengths for the UI. Live API
+  // matches keep the existing JSON schema (no matchedStrengths key), so we fill
+  // them here from the resume's detected skills without changing the response.
+  const ds = analysis?.detectedSkills ?? [];
+  if (ds.length) {
+    matches = matches.map((m, i) =>
+      m.matchedStrengths && m.matchedStrengths.length
+        ? m
+        : {
+            ...m,
+            matchedStrengths: Array.from(
+              new Set([ds[i % ds.length], ds[(i + 1) % ds.length], ds[(i + 2) % ds.length]])
+            )
+              .filter(Boolean)
+              .slice(0, 3),
+          }
+    );
+  }
+  // STEP 5 — job match titles (current run's analysis only).
+  console.log(`[CareerAI][${runId}] STEP 5 job matches:`, matches.map((m) => m.title).join(", ") || "(none)");
 
-    // Final role prefers the strongest match's title, else the inferred role.
-    const role = matches[0]?.title || inferredRole;
+  // Target role for downstream stages — the detected profession/specialization.
+  // No generic "your field" placeholder when a profession was actually detected.
+  const role = matches[0]?.title || targetRole || profession;
 
-    // 4) Job description — never empty; built from resume + role + skills + match.
-    const builtJobDescription = buildJobDescription(role, analysis, matches[0], jobDescription);
+  // 4) Job description — never empty; built from resume + role + skills + match.
+  const builtJobDescription = buildJobDescription(role, analysis, matches[0], jobDescription);
 
-    // 5) Cover letter — resume-primary, tailored to the (always non-empty) JD.
+  // 5) Cover letter — resume-primary (resilient). When resume text exists we
+  //    ALWAYS end with a real, resume-based letter (live AI or local build),
+  //    never the placeholder.
+  let apiCover: CoverLetterResult | null = null;
+  let coverLive = false;
+  try {
     const cJson = await postJson("/api/cover-letter/agent", {
       resumeText,
       jobDescription: builtJobDescription,
       analysis: analysis ?? undefined,
       tone: "Professional",
     });
-    const apiCover = (cJson.data as CoverLetterResult | undefined) ?? null;
-    const coverLive = cJson.source === "live-ai";
+    apiCover = (cJson.data as CoverLetterResult | undefined) ?? null;
+    coverLive = cJson.source === "live-ai";
+  } catch {
+    apiCover = null;
+    coverLive = false;
+  }
 
-    // ── DIAGNOSTIC (no behavior change) ─────────────────────────────────────
-    console.log("[CareerAI] runRealAI received resumeText length:", resumeText.length, "| jobDescription length (built):", builtJobDescription.length, "| target role:", role);
-    console.log("[CareerAI] 4/5. /api/resume/analyze source:", analysisLive ? "live-ai" : "demo-fallback (OpenAI NOT called — key missing or error)");
-    console.log("[CareerAI] 4/5. /api/cover-letter/agent source:", coverLive ? "live-ai" : "demo-fallback (OpenAI NOT called — key missing or error)");
-    console.log("[CareerAI] 6. cover letter generated from:", coverLive ? "AI (live)" : resumeText ? "LOCAL resume-based fallback" : "generic mock (no resume text)");
-    // ────────────────────────────────────────────────────────────────────────
+  const cover: CoverLetterResult | null = coverLive
+    ? apiCover
+    : resumeText
+    ? buildLocalCoverLetter(resumeText, role, analysis)
+    : apiCover;
 
-    // Live AI didn't produce the letter but resume text exists → build it
-    // locally from the resume text (never the hardcoded demo).
-    const cover: CoverLetterResult | null = coverLive
-      ? apiCover
-      : resumeText
-      ? buildLocalCoverLetter(resumeText, role, analysis)
-      : apiCover;
+  console.log(
+    `[CareerAI][${runId}] STEP 3 cover-letter →`, coverLive ? "live-ai" : "local",
+    "| first 200 chars:", JSON.stringify((cover?.coverLetter ?? "").slice(0, 200))
+  );
 
-    if (!cover) return fallback;
+  // Nothing real was generated (no resume AND the API produced nothing).
+  if (!cover) return fallback;
 
-    // 6) Interview questions — role-specific.
+  // 6) Interview questions — role-specific (resilient; a failure here never
+  //    discards the cover letter or matches). On a 429 / error / empty result
+  //    the interview route yields no questions; we then build profession-based
+  //    questions LOCALLY so this stage is never empty when a resume exists.
+  let questions: string[] = [];
+  let interviewLive = false;
+  try {
     const qJson = await postJson("/api/interview/generate", {
       jobTitle: role,
       jobDescription: builtJobDescription,
-      mode: "quick",
+      mode: "full",
       language: "English (US)",
     });
-    const questions = ((qJson.questions as { question?: string }[] | undefined) ?? [])
+    questions = ((qJson.questions as { question?: string }[] | undefined) ?? [])
       .map((q) => q.question?.trim() ?? "")
       .filter(Boolean);
-
-    // "Live" only when everything attempted came back from live AI.
-    const live = coverLive && (resumeText ? analysisLive : true);
-    return {
-      source: live ? "live-ai" : "demo-fallback",
-      outputs: mapToOutputs(analysis, cover, matches, questions, role),
-      analysis,
-      cover,
-    };
-  } catch {
-    return fallback;
+    interviewLive = questions.length > 0;
+  } catch (e) {
+    console.log(`[CareerAI][${runId}] STEP 4 interview → request failed:`, (e as Error)?.message);
+    questions = [];
   }
+  if (questions.length === 0 && resumeText) {
+    questions = buildLocalInterviewQuestions(analysis, role);
+    console.log(
+      `[CareerAI][${runId}] STEP 4 interview → LOCAL fallback (429/empty) —`,
+      questions.length, "questions for", analysis?.profession || role || "unknown field"
+    );
+  }
+  console.log(
+    `[CareerAI][${runId}] STEP 4 interview →`, interviewLive ? "live-ai" : "local",
+    "| first 2:", JSON.stringify(questions.slice(0, 2))
+  );
+
+  // "Live" only when the cover letter (and analysis, when a resume exists) came
+  // from live AI.
+  const live = coverLive && (resumeText ? analysisLive : true);
+
+  // Requirement 7 — one clear, visible line when the run fell back to the local
+  // resume-based pipeline (e.g. OpenAI 429). Confirms the dashboard is NOT empty.
+  if (!analysisLive && resumeText) {
+    console.log(
+      `[CareerAI][${runId}] fallback mode because OpenAI 429 —`,
+      "profession:", analysis?.profession || "(none)",
+      "| atsScore:", analysis?.atsScore ?? 0,
+      "| matches:", matches.map((m) => m.title).join(", ") || "(none)",
+      "| questions:", questions.length
+    );
+  }
+
+  return {
+    source: live ? "live-ai" : "demo-fallback",
+    outputs: mapToOutputs(analysis, cover, matches, questions, role),
+    analysis,
+    cover,
+  };
 }
 
 export default function WorkflowCanvas() {
@@ -281,6 +448,9 @@ export default function WorkflowCanvas() {
   const [aiResults, setAiResults] = useState<WorkflowOutputs | null>(null);
   const [aiSource, setAiSource] = useState<ResultSource | null>(null);
   const aiPromiseRef = useRef<Promise<AiRunResult> | null>(null);
+  // Unique id for the current run — every persisted section is stamped with it
+  // so the dashboard can prove it is reading ONE fresh run, not stale data.
+  const runIdRef = useRef<string>("");
 
   // Persist a completed run to localStorage (always) + Supabase (best-effort).
   const persistRun = (
@@ -289,15 +459,35 @@ export default function WorkflowCanvas() {
     analysis: ResumeAnalysis | null,
     cover: CoverLetterResult | null
   ) => {
+    const runId = runIdRef.current;
     const completedAt = new Date().toISOString();
     // A run "used a resume" if text was pasted OR a file was uploaded.
     const usedResume = resumeText.trim().length > 0 || !!resumeFileName;
     const resolvedSource: ResultSource = source ?? "demo-fallback";
 
+    // A cover letter counts as "generated" only when a real letter was produced
+    // (live AI or the local resume-based build) — never the mock placeholder.
+    const generatedCover = cover?.coverLetter?.trim() ? cover.coverLetter : "";
+    const hasCover = generatedCover.length > 0;
+
+    // ── TRACE (task 7): exactly what will land in the Dashboard for this run ──
+    console.log(`[CareerAI][${runId}] RUN SUMMARY →`, {
+      runId,
+      profession: analysis?.profession || "(none detected)",
+      atsScore: clamp100(outputs.ats.score),
+      missingSkills: (analysis?.missingSkills ?? outputs.missingSkills).length,
+      jobMatches: outputs.jobMatches.map((m) => m.title),
+      interviewQuestions: outputs.interviewQuestions.length,
+      coverLetterLength: generatedCover.length,
+      completedAt,
+      source: resolvedSource,
+    });
+
     saveWorkflowResults({
+      runId,
       resumeOptimized: true,
       atsScore: clamp100(outputs.ats.score),
-      coverLetterGenerated: true,
+      coverLetterGenerated: hasCover,
       jobMatchesCount: outputs.jobMatches.length,
       interviewSessionCreated: true,
       tasksCreated: 2,
@@ -305,13 +495,25 @@ export default function WorkflowCanvas() {
       source: resolvedSource,
       resumeName: usedResume ? resumeFileName ?? "Pasted resume" : undefined,
       resumePreview: usedResume ? resumeText.slice(0, 300) : undefined,
-      coverLetterTitle: cover?.title,
-      coverLetterText: outputs.coverLetter.preview,
+      coverLetterTitle: hasCover ? cover?.title : undefined,
+      coverLetterText: hasCover ? generatedCover : undefined,
+      jobMatches: outputs.jobMatches,
+      interviewQuestions: outputs.interviewQuestions,
+      detectedSkills: analysis?.detectedSkills,
+      missingSkills: analysis?.missingSkills ?? outputs.missingSkills,
+      strengths: analysis?.strengths,
+      recommendations: analysis?.recommendations,
     });
 
     // Best-effort DB write — no-ops without a session, never blocks the UI.
     const analysisRecord: ResumeAnalysis =
       analysis ?? {
+        profession: "",
+        specialization: "",
+        seniority: "",
+        industries: [],
+        softSkills: [],
+        careerGoals: [],
         detectedSkills: [],
         detectedLanguages: [],
         experienceSummary: "",
@@ -321,13 +523,10 @@ export default function WorkflowCanvas() {
         atsScore: clamp100(outputs.ats.score),
         recommendations: [],
       };
+    // Store the real generated letter, or an empty-text record when none was
+    // generated (so the Dashboard never treats a placeholder as generated).
     const coverRecord: CoverLetterResult =
-      cover ?? {
-        title: "Professional Cover Letter",
-        coverLetter: outputs.coverLetter.preview,
-        matchingKeywords: [],
-        toneSuggestions: [],
-      };
+      cover ?? { title: "", coverLetter: "", matchingKeywords: [], toneSuggestions: [] };
     // ── DIAGNOSTIC (no behavior change) ─────────────────────────────────────
     console.log(
       "[CareerAI] 7. saving to workflow_runs → source:", resolvedSource,
@@ -347,7 +546,11 @@ export default function WorkflowCanvas() {
         topFit: outputs.jobMatches.reduce((m, j) => Math.max(m, j.matchScore), 0),
         matches: outputs.jobMatches,
       },
-      interview: { questions: outputs.interviewQuestions.length, readiness: 78 },
+      interview: {
+        questions: outputs.interviewQuestions,
+        count: outputs.interviewQuestions.length,
+        readiness: 78,
+      },
       source: resolvedSource,
       completedAt,
     });
@@ -384,22 +587,37 @@ export default function WorkflowCanvas() {
     });
 
   const run = () => {
+    // (req 1) Clear ALL previous workflow state before starting a new run so
+    // nothing stale can survive into this upload's results.
+    clearWorkflowResults();
     setShowResults(false);
     setAiResults(null);
     setAiSource(null);
-    // Kick off real AI in parallel with the (unchanged) timed animation,
-    // whenever a resume or a job description is provided.
+    aiPromiseRef.current = null;
+
+    // (req 2) A brand-new unique id for THIS upload — the run can never be
+    // conflated with a previous one.
+    const runId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    runIdRef.current = runId;
+
+    // (req 3) Read the CURRENT resume text/file straight from state — replaced,
+    // never appended or reused.
     const resume = resumeText.trim();
     const job = jobDescription.trim();
-    // ── DIAGNOSTIC (no behavior change) ─────────────────────────────────────
-    console.log("[CareerAI] 1. resume uploaded?:", !!resumeFileName || resume.length > 0, "| file:", resumeFileName ?? "(none)");
-    console.log("[CareerAI] 2. resume text length:", resume.length);
+
+    // STEP 0 — filename + resumeText length + first 300 chars.
     console.log(
-      "[CareerAI] 3. resume text passed into AI?:",
-      resume || job ? `YES → runRealAI(resumeLen=${resume.length}, jobLen=${job.length})` : "NO → runRealAI SKIPPED (resume text AND job description are both empty)"
+      `[CareerAI] STEP 0 upload — file: ${resumeFileName ?? "(pasted)"}`,
+      `| resumeText length: ${resume.length}`,
+      `| first 300 chars:`, JSON.stringify(resume.slice(0, 300))
     );
-    // ────────────────────────────────────────────────────────────────────────
-    aiPromiseRef.current = resume || job ? runRealAI(resume, job) : null;
+    // STEP 1 — the unique runId for this upload.
+    console.log(`[CareerAI] STEP 1 runId: ${runId}`);
+
+    aiPromiseRef.current = resume || job ? runRealAI(resume, job, runId) : null;
     runPipeline();
   };
 

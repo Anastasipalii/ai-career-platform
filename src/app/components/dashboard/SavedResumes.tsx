@@ -8,6 +8,7 @@ interface SavedResumesProps {
   resumes: ResumeRow[];
   formatRelative: (iso: string) => string;
   onDelete: (id: string) => Promise<void>;
+  onRename: (id: string, title: string) => Promise<void>;
 }
 
 function AtsBar({ score }: { score: number }) {
@@ -22,15 +23,31 @@ function AtsBar({ score }: { score: number }) {
   );
 }
 
-export default function SavedResumes({ resumes, formatRelative, onDelete }: SavedResumesProps) {
+export default function SavedResumes({ resumes, formatRelative, onDelete, onRename }: SavedResumesProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId]           = useState<string | null>(null);
+  const [renameId, setRenameId]               = useState<string | null>(null);
+  const [renameValue, setRenameValue]         = useState("");
+  const [savingRename, setSavingRename]       = useState(false);
 
   const handleDelete = async (id: string) => {
     setDeletingId(id);
     await onDelete(id);
     setDeletingId(null);
     setConfirmDeleteId(null);
+  };
+
+  const startRename = (id: string, current: string) => {
+    setRenameId(id);
+    setRenameValue(current);
+  };
+
+  const submitRename = async (id: string) => {
+    if (!renameValue.trim()) return;
+    setSavingRename(true);
+    await onRename(id, renameValue);
+    setSavingRename(false);
+    setRenameId(null);
   };
 
   return (
@@ -92,7 +109,40 @@ export default function SavedResumes({ resumes, formatRelative, onDelete }: Save
 
               {/* Info */}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate mb-1">{resume.title}</p>
+                {renameId === resume.id ? (
+                  <div className="flex items-center gap-2 mb-1">
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitRename(resume.id);
+                        if (e.key === "Escape") setRenameId(null);
+                      }}
+                      className="flex-1 min-w-0 rounded-lg px-2.5 py-1 text-sm text-white outline-none"
+                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(124,58,237,0.4)" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => submitRename(resume.id)}
+                      disabled={savingRename}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-medium shrink-0 disabled:opacity-60"
+                      style={{ background: "rgba(124,58,237,0.15)", color: "#a78bfa", border: "1px solid rgba(124,58,237,0.3)" }}
+                    >
+                      {savingRename ? "…" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRenameId(null)}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-medium shrink-0"
+                      style={{ background: "rgba(255,255,255,0.05)", color: "#64748b", border: "1px solid rgba(255,255,255,0.08)" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-medium text-white truncate mb-1">{resume.title}</p>
+                )}
                 <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
                   <span>{resume.language}</span>
                   {resume.template_name && (
@@ -147,11 +197,20 @@ export default function SavedResumes({ resumes, formatRelative, onDelete }: Save
                   <>
                     <Link
                       href={`/resume-builder?id=${resume.id}`}
+                      title="Open in the builder to edit and download PDF"
                       className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-90"
                       style={{ background: "rgba(124,58,237,0.1)", color: "#a78bfa", border: "1px solid rgba(124,58,237,0.2)" }}
                     >
-                      Edit
+                      Edit / PDF
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => startRename(resume.id, resume.title)}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-90"
+                      style={{ background: "rgba(255,255,255,0.03)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.09)" }}
+                    >
+                      Rename
+                    </button>
                     <button
                       type="button"
                       onClick={() => setConfirmDeleteId(resume.id)}

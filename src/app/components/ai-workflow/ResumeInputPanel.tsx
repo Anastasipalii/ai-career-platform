@@ -4,14 +4,54 @@
 // ResumeInputPanel — optional resume input for the pipeline
 // ----------------------------------------------------------------------------
 // Lets the user paste resume text or upload a file. .txt / .md are read as
-// plain text into the textarea; .pdf / .doc / .docx are accepted (name shown)
-// but not parsed yet — the user is prompted to paste the text. Purely additive:
-// when left empty the pipeline runs its existing mock demo unchanged. Styling
-// reuses the app's dark-card design tokens; nothing else on the page is redesigned.
+// plain text; .pdf is parsed with pdfjs-dist and .docx with mammoth (both
+// client-side, dynamically imported). Extracted text flows into the same
+// textarea → the existing AI workflow. Any extraction failure degrades to the
+// paste prompt (no regression). Purely additive; UI is unchanged.
 // ============================================================================
 
 import { useRef, useState } from "react";
 import { FileText, Upload, X } from "lucide-react";
+
+// ── Minimal shapes for the dynamically-imported parsers (avoids depending on
+//    the packages' own type exports; casts stay valid across versions). ──────
+type PdfTextItem = { str?: string };
+type PdfPage = { getTextContent: () => Promise<{ items: PdfTextItem[] }> };
+type PdfDoc = { numPages: number; getPage: (n: number) => Promise<PdfPage> };
+type PdfjsModule = {
+  version: string;
+  GlobalWorkerOptions: { workerSrc: string };
+  getDocument: (src: { data: ArrayBuffer }) => { promise: Promise<PdfDoc> };
+};
+type MammothModule = {
+  extractRawText: (input: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }>;
+};
+
+// Extract text from a PDF using pdfjs-dist. The worker is served from the app
+// itself (copied into /public) so its version always matches the installed
+// package — no CDN dependency and no version-mismatch 404s.
+async function extractPdfText(file: File): Promise<string> {
+  const pdfjs = (await import("pdfjs-dist")) as unknown as PdfjsModule;
+  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+  const data = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data }).promise;
+  let out = "";
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    out += content.items.map((it) => it.str ?? "").join(" ") + "\n";
+  }
+  return out.trim();
+}
+
+// Extract text from a .docx using mammoth (handles CJS default-interop).
+async function extractDocxText(file: File): Promise<string> {
+  const mod = (await import("mammoth")) as unknown as MammothModule & { default?: MammothModule };
+  const mammoth = mod.default ?? mod;
+  const arrayBuffer = await file.arrayBuffer();
+  const { value } = await mammoth.extractRawText({ arrayBuffer });
+  return value.trim();
+}
 
 interface ResumeInputPanelProps {
   value: string;
@@ -46,15 +86,22 @@ export default function ResumeInputPanel({
     setNotice(null);
     if (!file) return;
 
+    // A NEW file is being loaded → drop any previous resume text immediately so
+    // a failed/partial extraction can NEVER silently reuse the prior resume.
+    // (Root-cause fix: previously, if the new file failed to extract, the old
+    // resume's text stayed in state and every downstream section kept showing
+    // the previous resume's results.)
+    onChange("");
+
     const isText =
       file.type === "text/plain" ||
       file.type === "text/markdown" ||
       /\.(txt|md|markdown)$/i.test(file.name);
-    const isDoc =
-      /\.(pdf|doc|docx)$/i.test(file.name) ||
-      file.type === "application/pdf" ||
-      file.type === "application/msword" ||
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+    const isDocx =
+      /\.docx$/i.test(file.name) ||
       file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const isLegacyDoc = /\.doc$/i.test(file.name) || file.type === "application/msword";
 
     // Plain-text files: read directly into the textarea.
     if (isText) {
@@ -68,11 +115,28 @@ export default function ResumeInputPanel({
       return;
     }
 
-    // PDF / DOC / DOCX: accept the file but don't parse it yet (extraction not
-    // implemented). Record the name and prompt the user to paste the text.
-    if (isDoc) {
+    // PDF / DOCX: extract text client-side and feed it into the workflow.
+    if (isPdf || isDocx) {
       onFileNameChange(file.name);
-      setNotice("File uploaded. Paste resume text below if text extraction is not available yet.");
+      setNotice("Extracting text from your file…");
+      try {
+        const text = isPdf ? await extractPdfText(file) : await extractDocxText(file);
+        if (text && text.trim().length > 20) {
+          onChange(text.slice(0, MAX_CHARS));
+          setNotice(null);
+        } else {
+          setNotice("Couldn't read text from this file (it may be scanned/image-based). Paste your resume text below.");
+        }
+      } catch {
+        setNotice("Automatic extraction failed. Paste your resume text below.");
+      }
+      return;
+    }
+
+    // Legacy binary .doc isn't reliably extractable — prompt for .docx/PDF/paste.
+    if (isLegacyDoc) {
+      onFileNameChange(file.name);
+      setNotice("Legacy .doc isn't supported for extraction. Save as .docx or PDF, or paste the text below.");
       return;
     }
 
@@ -103,7 +167,7 @@ export default function ResumeInputPanel({
           <div className="min-w-0">
             <h3 className="text-white font-semibold text-[13.5px] leading-tight">Your resume (optional)</h3>
             <p className="text-slate-500 text-[11.5px] leading-snug mt-0.5">
-              Paste text or upload a file (.txt, .md, .pdf, .doc, .docx). Leave empty for the demo.
+              Paste text or upload a file (.txt, .md, .pdf, .doc, .docx) to personalize your results.
             </p>
           </div>
         </div>

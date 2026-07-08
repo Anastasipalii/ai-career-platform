@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
+import { withRetryOn429 } from "@/lib/openaiRetry";
+import { LANGUAGE_RULE_INTERVIEW } from "@/lib/promptLanguage";
 
 type InterviewMode = "quick" | "hr" | "technical" | "full";
 
@@ -50,8 +52,11 @@ export async function POST(req: NextRequest) {
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  const system = `You are an expert interview coach. Generate realistic, role-specific interview questions in ${language || "English (US)"}.
-Return ONLY valid JSON — no markdown, no extra text.`;
+  const system = `You are an expert interview coach. Generate realistic, role-specific interview questions.
+Return ONLY valid JSON — no markdown, no extra text.
+
+${LANGUAGE_RULE_INTERVIEW}
+Requested language (fallback when the context language is ambiguous): ${language || "English (US)"}.`;
 
   const user = `Generate exactly ${count} interview questions.
 
@@ -73,15 +78,17 @@ Return JSON with this exact structure:
 Make every question specific and tailored to the role. Vary the categories appropriately for ${focus}.`;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: system },
-        { role: "user",   content: user },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-    });
+    const completion = await withRetryOn429(() =>
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: system },
+          { role: "user",   content: user },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+      })
+    );
 
     const raw = completion.choices[0]?.message?.content;
     if (!raw) {
@@ -97,17 +104,29 @@ Make every question specific and tailored to the role. Vary the categories appro
 
     return NextResponse.json({ questions });
   } catch (err) {
-    // Graceful 429 handling
-    if (
-      err instanceof Error &&
-      (err.message.includes("429") || err.message.toLowerCase().includes("quota") || err.message.toLowerCase().includes("rate limit"))
-    ) {
+    const e = err as { status?: number; code?: string; message?: string };
+    const msg = e?.message ?? "AI generation failed.";
+    const is429 =
+      e?.status === 429 || /\b429\b|rate limit|quota|too many requests/i.test(msg);
+    // Graceful 429 handling — the client builds local, profession-based
+    // questions when this route can't serve live ones.
+    if (is429) {
+      // Surface the exact subtype so the cause is confirmable in the terminal:
+      //   insufficient_quota  → billing/credits exhausted (persistent)
+      //   rate_limit_exceeded → too many requests/tokens per minute (transient)
+      console.log(
+        "[CareerAI route:interview] OpenAI 429 →",
+        "code:", e?.code ?? "(none)",
+        "| meaning:", e?.code === "insufficient_quota"
+          ? "billing/quota exhausted — add credits"
+          : "rate limit — retry later / spacing helps",
+        "| message:", msg
+      );
       return NextResponse.json(
-        { error: "AI generation is unavailable right now. Please check OpenAI billing or try again later." },
+        { error: "AI generation is temporarily unavailable (rate limit). Local fallback will be used.", code: e?.code ?? "rate_limited" },
         { status: 429 }
       );
     }
-    const msg = err instanceof Error ? err.message : "AI generation failed.";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

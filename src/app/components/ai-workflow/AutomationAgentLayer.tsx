@@ -214,7 +214,7 @@ export default function AutomationAgentLayer() {
         </div>
 
         <p className="text-[11px] text-slate-600 mt-6">
-          Conceptual architecture · agents and orchestration are illustrative for this demo.
+          Conceptual architecture · agents and orchestration shown for illustration.
         </p>
       </div>
     </section>

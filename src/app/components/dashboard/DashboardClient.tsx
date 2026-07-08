@@ -1,21 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatRelative } from "@/lib/formatRelative";
-import { readWorkflowResults, type WorkflowResults } from "@/lib/workflowResults";
-import { readLatestWorkflowRun, type WorkflowRunRow } from "@/lib/workflowRun";
+import {
+  readWorkflowResults,
+  WORKFLOW_RESULTS_KEY,
+  WORKFLOW_UPDATED_EVENT,
+  type WorkflowResults,
+} from "@/lib/workflowResults";
+import { readRecentWorkflowRuns, type WorkflowRunRow, type WorkflowJobMatch } from "@/lib/workflowRun";
 
 // Map a Supabase workflow_runs row onto the same shape the Dashboard already
 // uses for stats + recent activity (keeps the UI unchanged).
 function mapRunRowToResults(row: WorkflowRunRow): WorkflowResults {
-  const jm = (row.job_match ?? {}) as { count?: number };
+  const jm = (row.job_match ?? {}) as { count?: number; matches?: WorkflowJobMatch[] };
+  const iv = (row.interview ?? {}) as { questions?: unknown };
+  const interviewQuestions = Array.isArray(iv.questions)
+    ? (iv.questions as unknown[]).filter((q): q is string => typeof q === "string")
+    : [];
+  const matches = Array.isArray(jm.matches) ? jm.matches : [];
   return {
     resumeOptimized: true,
     atsScore: row.ats_score ?? 0,
-    coverLetterGenerated: Boolean(row.cover_letter),
-    jobMatchesCount: typeof jm.count === "number" ? jm.count : 8,
+    coverLetterGenerated: Boolean(row.cover_letter?.coverLetter?.trim()),
+    jobMatchesCount: typeof jm.count === "number" ? jm.count : matches.length,
     interviewSessionCreated: true,
     tasksCreated: 2,
     completedAt: row.completed_at,
@@ -24,6 +35,12 @@ function mapRunRowToResults(row: WorkflowRunRow): WorkflowResults {
     resumePreview: row.resume_preview ?? undefined,
     coverLetterTitle: row.cover_letter?.title,
     coverLetterText: row.cover_letter?.coverLetter,
+    jobMatches: matches,
+    interviewQuestions,
+    detectedSkills: row.analysis?.detectedSkills,
+    missingSkills: row.analysis?.missingSkills,
+    strengths: row.analysis?.strengths,
+    recommendations: row.analysis?.recommendations,
   };
 }
 import DashboardSidebar from "@/app/components/dashboard/DashboardSidebar";
@@ -31,6 +48,8 @@ import DashboardHeader from "@/app/components/dashboard/DashboardHeader";
 import QuickStats from "@/app/components/dashboard/QuickStats";
 import RecentActivity from "@/app/components/dashboard/RecentActivity";
 import CoverLetterWidget from "@/app/components/dashboard/CoverLetterWidget";
+import WorkflowStatusCard from "@/app/components/dashboard/WorkflowStatusCard";
+import RoadmapNextSteps, { hasRoadmap } from "@/app/components/dashboard/RoadmapNextSteps";
 import QuickActions from "@/app/components/dashboard/QuickActions";
 import SavedResumes from "@/app/components/dashboard/SavedResumes";
 import SavedCoverLetters from "@/app/components/dashboard/SavedCoverLetters";
@@ -54,6 +73,7 @@ export interface CoverLetterRow {
   company_name: string;
   job_title: string;
   language: string;
+  content: string;
   updated_at: string;
 }
 
@@ -71,6 +91,11 @@ export interface JobMatchRow {
   company_name: string | null;
   match_score: number | null;
   created_at: string;
+  // Optional AI-recommendation detail (present for workflow-derived matches).
+  why?: string;
+  matchedStrengths?: string[];
+  missingSkills?: string[];
+  recommendedSkills?: string[];
 }
 
 export interface CareerPathRow {
@@ -95,6 +120,9 @@ export default function DashboardClient() {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userEmail, setUserEmail]     = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  // Auth gating: null = still checking, true/false = resolved.
+  const [authed, setAuthed]           = useState<boolean | null>(null);
 
   const [resumes, setResumes]               = useState<ResumeRow[]>([]);
   const [coverLetters, setCoverLetters]     = useState<CoverLetterRow[]>([]);
@@ -102,27 +130,73 @@ export default function DashboardClient() {
   const [jobMatches, setJobMatches]         = useState<JobMatchRow[]>([]);
   const [careerPath, setCareerPath]         = useState<CareerPathRow | null>(null);
   const [languageCount, setLanguageCount]   = useState(0);
-  // Frontend-only mock: results from the latest AI Workflow run (localStorage).
+  // Latest AI Workflow run (drives the run-specific widgets).
   const [workflow, setWorkflow]             = useState<WorkflowResults | null>(null);
+  // Previous runs (kept so history stays visible in Recent Activity).
+  const [pastRuns, setPastRuns]             = useState<WorkflowResults[]>([]);
 
-  useEffect(() => {
-    async function load() {
-      // Immediate fallback: the localStorage mock run (client-side, SSR-safe).
-      const localRun = readWorkflowResults();
-      if (localRun) setWorkflow(localRun);
-      // ── DIAGNOSTIC (no behavior change) ───────────────────────────────────
-      console.log("[CareerAI] 8. dashboard read — localStorage run present?:", !!localRun, "| source:", localRun?.source ?? "(none)", "| completedAt:", localRun?.completedAt ?? "(none)");
-      // ──────────────────────────────────────────────────────────────────────
-
-      const { data: { session } } = await supabase.auth.getSession();
-      setUserEmail(session?.user?.email ?? null);
-      if (!session) return;
+  const load = useCallback(async () => {
+      // ── Auth gate: no session → no personal data, show CTA. ───────────────
+      let session = null;
+      try {
+        session = (await supabase.auth.getSession()).data.session;
+      } catch {
+        // Can't verify a session → treat as unauthenticated (never hang).
+        setAuthed(false);
+        return;
+      }
+      if (!session) {
+        setAuthed(false);
+        return;
+      }
+      setAuthed(true);
       const uid = session.user.id;
 
-      // Prefer the latest persisted run from Supabase when available.
-      const remoteRun = await readLatestWorkflowRun();
-      console.log("[CareerAI] 8. dashboard read — Supabase latest workflow_run present?:", !!remoteRun, "| source:", remoteRun?.source ?? "(none)", "| completedAt:", remoteRun?.completed_at ?? "(none)", "→ using:", remoteRun ? "SUPABASE latest" : localRun ? "localStorage" : "none");
-      if (remoteRun) setWorkflow(mapRunRowToResults(remoteRun));
+      // Real profile for the header (falls back to the email local-part).
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", uid)
+        .maybeSingle();
+      const email = profile?.email ?? session.user.email ?? null;
+      setUserEmail(email);
+      setDisplayName(
+        profile?.full_name?.trim() ||
+          (email ? email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) : null)
+      );
+
+      // Latest run: read BOTH stores and show whichever finished most recently.
+      // A run may persist to Supabase, to localStorage, or (best-effort) both;
+      // reading Supabase-first unconditionally could surface a STALE older row
+      // and hide a fresh run that only reached localStorage. Compare timestamps
+      // so the Dashboard always reflects the most recent completed run.
+      const recentRows = await readRecentWorkflowRuns(10);
+      const remoteMappedList = recentRows.map(mapRunRowToResults);
+      const remoteMapped = remoteMappedList[0] ?? null;
+      const localRun = readWorkflowResults();
+      const timeOf = (r: WorkflowResults | null) =>
+        r ? new Date(r.completedAt).getTime() || 0 : -1;
+      const latestRun =
+        timeOf(localRun) > timeOf(remoteMapped) ? localRun : remoteMapped;
+      // Keep every OTHER run as history (never overwritten — each run is its own
+      // row), excluding whichever run is currently shown as the latest.
+      setPastRuns(
+        remoteMappedList.filter((r) => r.completedAt !== latestRun?.completedAt)
+      );
+      // STEP 6 — the runId the dashboard is actually displaying (proves it is
+      // the latest current run, not a stale Supabase/localStorage row).
+      if (latestRun) {
+        console.log(
+          "[CareerAI] STEP 6 dashboard displaying runId:", latestRun.runId ?? "(remote row — no runId)",
+          "| completedAt:", latestRun.completedAt,
+          "| atsScore:", latestRun.atsScore,
+          "| job matches:", (latestRun.jobMatches ?? []).map((m) => m.title).join(", ") || "(none)",
+          "| store:", timeOf(localRun) > timeOf(remoteMapped) ? "localStorage" : "supabase"
+        );
+      } else {
+        console.log("[CareerAI] STEP 6 dashboard displaying runId: (no run found)");
+      }
+      setWorkflow(latestRun);
 
       const [resumesRes, coversRes, interviewsRes, matchesRes, pathsRes, transRes] =
         await Promise.all([
@@ -134,7 +208,7 @@ export default function DashboardClient() {
 
           supabase
             .from("cover_letters")
-            .select("id, company_name, job_title, language, updated_at")
+            .select("id, company_name, job_title, language, content, updated_at")
             .eq("user_id", uid)
             .order("updated_at", { ascending: false }),
 
@@ -173,9 +247,30 @@ export default function DashboardClient() {
         (transRes.data ?? []).map((t: { target_language: string }) => t.target_language)
       );
       setLanguageCount(uniqueLangs.size);
-    }
-    load();
   }, []);
+
+  // Load on mount AND re-load whenever a run completes (same-tab event or
+  // cross-tab storage change) or the tab regains focus — so the Dashboard never
+  // shows a stale first-load snapshot after a new resume is processed.
+  useEffect(() => {
+    let mounted = true;
+    const reload = () => { if (mounted) load(); };
+    // Initial load scheduled as a microtask (not a synchronous setState call).
+    Promise.resolve().then(reload);
+    const onVisible = () => { if (document.visibilityState === "visible") reload(); };
+    const onStorage = (e: StorageEvent) => { if (e.key === WORKFLOW_RESULTS_KEY) reload(); };
+    window.addEventListener(WORKFLOW_UPDATED_EVENT, reload);
+    window.addEventListener("focus", reload);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      mounted = false;
+      window.removeEventListener(WORKFLOW_UPDATED_EVENT, reload);
+      window.removeEventListener("focus", reload);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [load]);
 
   // ── Derived values ────────────────────────────────────────────────────────
 
@@ -217,8 +312,20 @@ export default function DashboardClient() {
       })()
     : [];
 
+  // Previous runs — kept visible so history isn't lost when a new run is added.
+  const historyActivities: ActivityItem[] = pastRuns.map((r, i) => ({
+    id: `wf-hist-${i}`,
+    action: "Resume analyzed",
+    detail: `${r.resumeName ? `${r.resumeName} · ` : ""}ATS ${r.atsScore}/100${
+      r.jobMatches?.[0]?.title ? ` · ${r.jobMatches[0].title}` : ""
+    }`,
+    timestamp: r.completedAt,
+    type: "resume" as const,
+  }));
+
   const activities: ActivityItem[] = [
     ...workflowActivities,
+    ...historyActivities,
     ...resumes.map((r) => ({
       id: r.id,
       action: "Resume saved",
@@ -249,7 +356,70 @@ export default function DashboardClient() {
     })),
   ]
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 6);
+    .slice(0, 10);
+
+  // ── Widget feeds: use real table rows when present, else the latest
+  //    workflow run (workflow_runs) so each section reflects the run. ─────────
+
+  // Top Job Matches — from workflow_runs.job_match when the table is empty.
+  const workflowJobRows: JobMatchRow[] = (workflow?.jobMatches ?? []).map((m, i) => ({
+    id: `wf-jm-${i}`,
+    job_title: m.title,
+    company_name: null,
+    match_score: m.matchScore,
+    created_at: workflow?.completedAt ?? new Date().toISOString(),
+    why: m.whyMatch,
+    matchedStrengths: m.matchedStrengths,
+    missingSkills: m.missingSkills,
+    recommendedSkills: m.recommendedSkills,
+  }));
+  // Prefer the CURRENT run's matches so a fresh upload always drives this
+  // section; only fall back to saved job_matches table rows when the run has
+  // none. This prevents stale table rows from masking the latest run.
+  const jobMatchRows: JobMatchRow[] = workflowJobRows.length ? workflowJobRows : jobMatches;
+
+  // Saved Resume — from the latest workflow run when the table is empty.
+  const workflowResumeRows: ResumeRow[] =
+    workflow && (workflow.resumeName || workflow.resumeOptimized)
+      ? [
+          {
+            id: "wf-resume",
+            title: workflow.resumeName ?? "Uploaded resume",
+            language: "English (US)",
+            template_name: null,
+            ats_score: workflow.atsScore ?? null,
+            updated_at: workflow.completedAt,
+          },
+        ]
+      : [];
+  const resumeRows: ResumeRow[] = resumes.length ? resumes : workflowResumeRows;
+
+  // Interview questions generated by the latest run.
+  const interviewQuestions: string[] = workflow?.interviewQuestions ?? [];
+
+  // Roadmap: the workflow-derived "Next Steps" and the sidebar RoadmapWidget
+  // must never both appear. Next Steps take priority when available.
+  const nextStepsReady = hasRoadmap(workflow);
+  // Show the sidebar roadmap only when it has real content (a saved career
+  // path) OR when there are no generated Next Steps to show instead.
+  const showSidebarRoadmap = Boolean(careerPath) || !nextStepsReady;
+
+  // Saved Cover Letters — surface the latest workflow-generated letter at the
+  // top (from workflow_runs) alongside any letters saved via the cover-letter page.
+  const workflowCoverRows: CoverLetterRow[] =
+    workflow?.coverLetterText && workflow.coverLetterText.trim()
+      ? [
+          {
+            id: "wf-cover",
+            company_name: workflow.coverLetterCompany || "Latest cover letter",
+            job_title: workflow.coverLetterRole || workflow.coverLetterTitle || "Generated from your resume",
+            language: "English (US)",
+            content: workflow.coverLetterText,
+            updated_at: workflow.completedAt,
+          },
+        ]
+      : [];
+  const coverLetterRows: CoverLetterRow[] = [...workflowCoverRows, ...coverLetters];
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -265,7 +435,74 @@ export default function DashboardClient() {
     }
   };
 
+  const handleRenameResume = async (id: string, title: string) => {
+    const clean = title.trim();
+    if (!clean) return;
+    const { error } = await supabase.from("resumes").update({ title: clean }).eq("id", id);
+    if (!error) {
+      setResumes((prev) => prev.map((r) => (r.id === id ? { ...r, title: clean } : r)));
+    }
+  };
+
+  const handleDeleteCoverLetter = async (id: string) => {
+    const { error } = await supabase.from("cover_letters").delete().eq("id", id);
+    if (!error) {
+      setCoverLetters((prev) => prev.filter((c) => c.id !== id));
+    }
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
+
+  // Still checking the session — avoid flashing dashboard or CTA.
+  if (authed === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#05050a" }}>
+        <div className="w-8 h-8 rounded-full border-2 border-white/15 border-t-violet-400 animate-spin" />
+      </div>
+    );
+  }
+
+  // Not authenticated — no personal data, just a clear sign-in CTA.
+  if (!authed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "#05050a" }}>
+        <div
+          className="w-full max-w-md rounded-2xl border p-8 text-center"
+          style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.08)" }}
+        >
+          <div
+            className="w-12 h-12 rounded-xl mx-auto mb-5 flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
+          >
+            <svg width="22" height="22" viewBox="0 0 18 18" fill="none">
+              <path d="M9 2L16 6.5V11.5L9 16L2 11.5V6.5L9 2Z" stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
+              <circle cx="9" cy="9" r="2.5" fill="white" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-bold text-white mb-2">Your Personal Dashboard</h1>
+          <p className="text-sm text-slate-400 mb-6 leading-relaxed">
+            Sign in to access your resumes, ATS analysis, AI cover letters, interview preparation and career progress.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              href="/login"
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:scale-[1.02]"
+              style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)", boxShadow: "0 0 24px rgba(124,58,237,0.3)" }}
+            >
+              Sign In
+            </Link>
+            <Link
+              href="/signup"
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-300 border transition-colors hover:text-white"
+              style={{ borderColor: "rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}
+            >
+              Create Account
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex" style={{ background: "#05050a" }}>
@@ -304,7 +541,7 @@ export default function DashboardClient() {
       <div className="flex-1 lg:pl-60 min-w-0">
         <main className="px-4 sm:px-6 lg:px-8 py-7 max-w-[1400px]">
 
-          <DashboardHeader onMenuClick={() => setSidebarOpen(true)} userEmail={userEmail} />
+          <DashboardHeader onMenuClick={() => setSidebarOpen(true)} userEmail={userEmail} displayName={displayName} />
 
           <QuickStats
             resumeCount={resumeCount}
@@ -319,32 +556,47 @@ export default function DashboardClient() {
             <RecentActivity activities={activities} formatRelative={formatRelative} />
             <div className="flex flex-col gap-5">
               <QuickActions />
-              <RoadmapWidget careerPath={careerPath} />
+              {showSidebarRoadmap && <RoadmapWidget careerPath={careerPath} />}
             </div>
           </div>
 
-          {/* Latest generated cover letter from the newest workflow run */}
+          {/* Workflow completion status + latest generated cover letter */}
+          {workflow && (
+            <div className="mb-5">
+              <WorkflowStatusCard workflow={workflow} />
+            </div>
+          )}
           {workflow && (
             <div className="mb-5">
               <CoverLetterWidget workflow={workflow} />
             </div>
           )}
+          {workflow && nextStepsReady && (
+            <div className="mb-5">
+              <RoadmapNextSteps workflow={workflow} />
+            </div>
+          )}
 
           <div className="mb-5">
             <SavedResumes
-              resumes={resumes}
+              resumes={resumeRows}
               formatRelative={formatRelative}
               onDelete={handleDeleteResume}
+              onRename={handleRenameResume}
             />
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5 mb-5">
-            <JobMatchesWidget matches={jobMatches} formatRelative={formatRelative} />
-            <InterviewWidget sessions={interviews} formatRelative={formatRelative} />
+            <JobMatchesWidget matches={jobMatchRows} formatRelative={formatRelative} />
+            <InterviewWidget sessions={interviews} questions={interviewQuestions} formatRelative={formatRelative} />
           </div>
 
           <div className="mb-8">
-            <SavedCoverLetters coverLetters={coverLetters} formatRelative={formatRelative} />
+            <SavedCoverLetters
+              coverLetters={coverLetterRows}
+              formatRelative={formatRelative}
+              onDelete={handleDeleteCoverLetter}
+            />
           </div>
 
           <p className="text-xs text-slate-700 text-center pb-2">CareerAI · Your data is private and secured</p>

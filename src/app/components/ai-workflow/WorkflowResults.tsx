@@ -123,28 +123,17 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-white font-bold text-lg tracking-tight leading-tight">Pipeline complete — your outputs</h3>
-            {source && (
+            {source === "live-ai" && (
               <span
                 className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide"
-                style={
-                  source === "live-ai"
-                    ? { color: "#34d399", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)" }
-                    : { color: "#fbbf24", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)" }
-                }
+                style={{ color: "#34d399", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)" }}
               >
-                <span
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ background: source === "live-ai" ? "#34d399" : "#fbbf24" }}
-                />
-                {source === "live-ai" ? "Live AI" : "Demo AI fallback"}
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#34d399" }} />
+                Live AI
               </span>
             )}
           </div>
-          <p className="text-slate-500 text-[12.5px]">
-            {source === "live-ai"
-              ? "Generated from your resume by the AI agents"
-              : "Generated from the demo run · illustrative mock data"}
-          </p>
+          <p className="text-slate-500 text-[12.5px]">Generated from your resume</p>
         </div>
       </div>
 
@@ -157,7 +146,7 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
             <div className="flex-1 min-w-0">
               <p className="text-emerald-300 text-[13px] font-medium mb-3">{o.ats.verdict}</p>
               <div className="flex flex-col gap-2.5">
-                {o.ats.subScores.map((s) => (
+                {o.ats.subScores.filter((s) => s.score > 0).map((s) => (
                   <div key={s.label}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-slate-400 text-[11.5px]">{s.label}</span>
@@ -182,20 +171,27 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
           <p className="text-slate-400 text-[12.5px] mb-3 leading-relaxed">
             Skills the target roles expect that aren&apos;t yet on your resume:
           </p>
-          <div className="flex flex-wrap gap-2">
-            {o.missingSkills.map((skill) => (
-              <span
-                key={skill}
-                className="px-3 py-1.5 rounded-lg text-[12.5px] font-medium"
-                style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.28)" }}
-              >
-                {skill}
-              </span>
-            ))}
-          </div>
+          {o.missingSkills.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {o.missingSkills.map((skill) => (
+                <span
+                  key={skill}
+                  className="px-3 py-1.5 rounded-lg text-[12.5px] font-medium"
+                  style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.28)" }}
+                >
+                  {skill}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-slate-500 text-[12px]">
+              Run the pipeline with your resume to see the skill gaps for your field.
+            </p>
+          )}
         </div>
 
-        {/* Improved resume bullets — full width */}
+        {/* Improved resume bullets — full width (only when produced) */}
+        {o.resumeBullets.length > 0 && (
         <div className="rounded-2xl border p-5 lg:col-span-2" style={cardStyle}>
           <h4 className="text-[11px] uppercase tracking-widest text-slate-500 font-semibold mb-4">Improved Resume Bullets</h4>
           <div className="flex flex-col gap-3">
@@ -220,10 +216,16 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
             ))}
           </div>
         </div>
+        )}
 
         {/* Top job matches — full width */}
         <div className="rounded-2xl border p-5 lg:col-span-2" style={cardStyle}>
           <h4 className="text-[11px] uppercase tracking-widest text-slate-500 font-semibold mb-4">Top Job Matches</h4>
+          {o.jobMatches.length === 0 && (
+            <p className="text-slate-500 text-[12px]">
+              Run the pipeline with your resume to see roles matched to your field.
+            </p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {o.jobMatches.slice(0, 3).map((m, i) => (
               <div
@@ -339,6 +341,11 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
         {/* Interview questions */}
         <div className="rounded-2xl border p-5" style={cardStyle}>
           <h4 className="text-[11px] uppercase tracking-widest text-slate-500 font-semibold mb-4">Interview Questions</h4>
+          {o.interviewQuestions.length === 0 && (
+            <p className="text-slate-500 text-[12px]">
+              Run the pipeline with your resume to generate questions tailored to your field.
+            </p>
+          )}
           <ol className="flex flex-col gap-2.5">
             {o.interviewQuestions.map((q, i) => (
               <li key={i} className="flex items-start gap-3">
