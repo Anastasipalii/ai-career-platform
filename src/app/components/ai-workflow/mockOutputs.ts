@@ -18,7 +18,7 @@ export interface ResumeBullet {
 
 export interface JobMatch {
   title: string;
-  /** Optional — omitted for AI recommendations (no fake companies). */
+  /** Real company from the provider (present for live jobs). */
   company?: string;
   matchScore: number; // 0–100
   whyMatch: string;
@@ -26,6 +26,17 @@ export interface JobMatch {
   matchedStrengths?: string[];
   missingSkills: string[];
   recommendedSkills: string[];
+  // ── Real-provider identity (preserved end-to-end for live jobs) ──
+  externalId?: string;
+  provider?: string;
+  location?: string | null;
+  remote?: boolean;
+  jobTypes?: string[];
+  sourceUrl?: string;
+  applyUrl?: string;
+  publishedAt?: string | null;
+  /** True only for stress/demo synthetic matches — never for production. */
+  synthetic?: boolean;
 }
 
 export interface WorkflowOutputs {
@@ -43,6 +54,9 @@ export interface WorkflowOutputs {
   };
   jobMatches: JobMatch[];
   interviewQuestions: string[];
+  /** Set when real provider job data could not be retrieved (production mode).
+   *  The UI shows a "real job data unavailable" state instead of any fallback. */
+  jobsUnavailable?: boolean;
 }
 
 // Profession-agnostic scaffold. The only illustrative values are the generic

@@ -8,6 +8,23 @@
 // in English, so the response schema and all downstream parsing are unchanged.
 // ============================================================================
 
+/**
+ * STRICT, explicit output-language rule. The language is fixed by the caller
+ * (derived from the résumé), so output NEVER depends on job titles, company
+ * names, or job descriptions. This is the preferred rule for every LLM route.
+ */
+export function languageRule(language: string): string {
+  const lang = (language || "English").trim();
+  return (
+    `LANGUAGE (STRICT): Write EVERY natural-language field VALUE strictly in ${lang}. ` +
+    `Do NOT infer, switch, or mix languages based on job titles, company names, or job ` +
+    `descriptions — the output language is fixed to ${lang}. If any provided context is in a ` +
+    `different language, still write your output in ${lang}. Keep all JSON keys exactly as ` +
+    `specified in English, keep fixed enumerated tokens (e.g. seniority Junior/Mid-level/Senior/` +
+    `Lead/Executive and interview categories) in English, and do not add, remove, or rename fields.`
+  );
+}
+
 /** For routes that receive the resume (and optionally a job description). */
 export const LANGUAGE_RULE_RESUME =
   "LANGUAGE: Detect the primary language of the candidate's RESUME. If a JOB DESCRIPTION is also " +

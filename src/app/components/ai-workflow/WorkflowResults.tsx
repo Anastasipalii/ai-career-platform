@@ -223,11 +223,13 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
           <h4 className="text-[11px] uppercase tracking-widest text-slate-500 font-semibold mb-4">Top Job Matches</h4>
           {o.jobMatches.length === 0 && (
             <p className="text-slate-500 text-[12px]">
-              Run the pipeline with your resume to see roles matched to your field.
+              {o.jobsUnavailable
+                ? "Live job data is temporarily unavailable."
+                : "No relevant live vacancies were found for this profile right now."}
             </p>
           )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {o.jobMatches.slice(0, 3).map((m, i) => (
+            {o.jobMatches.slice(0, 6).map((m, i) => (
               <div
                 key={i}
                 className="rounded-xl p-4 flex flex-col gap-2.5"
@@ -245,38 +247,32 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
                     {m.matchScore}%
                   </span>
                 </div>
-                <p className="text-slate-400 text-[11.5px] leading-snug">{m.whyMatch}</p>
-                {m.missingSkills.length > 0 && (
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-slate-600 mb-1">Missing</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {m.missingSkills.map((s) => (
-                        <span
-                          key={s}
-                          className="px-2 py-0.5 rounded-md text-[11px]"
-                          style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.28)" }}
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                {(m.location || m.remote || (m.jobTypes && m.jobTypes.length) || m.publishedAt) && (
+                  <p className="text-slate-500 text-[11px] leading-snug">
+                    {[
+                      m.location || null,
+                      m.remote ? "Remote" : null,
+                      m.jobTypes && m.jobTypes.length ? m.jobTypes.join(" / ") : null,
+                      m.publishedAt ? new Date(m.publishedAt).toLocaleDateString() : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
                 )}
-                {m.recommendedSkills.length > 0 && (
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-slate-600 mb-1">Learn next</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {m.recommendedSkills.map((s) => (
-                        <span
-                          key={s}
-                          className="px-2 py-0.5 rounded-md text-[11px]"
-                          style={{ background: "rgba(124,58,237,0.1)", color: "#c4b5fd", border: "1px solid rgba(124,58,237,0.28)" }}
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                {/* Strengths / missing / learn-next are stored on the run but
+                    intentionally hidden on the compact card (kept for a future
+                    detailed vacancy page). */}
+                {/* Opens the REAL provider listing in a new tab — never submits. */}
+                {m.sourceUrl && (
+                  <a
+                    href={m.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-auto inline-flex items-center gap-1 text-[11.5px] font-medium hover:underline"
+                    style={{ color: "#7dd3fc" }}
+                  >
+                    View &amp; apply ↗
+                  </a>
                 )}
               </div>
             ))}

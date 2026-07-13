@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { withRetryOn429 } from "@/lib/openaiRetry";
 import { analyzeResumeLocally } from "@/lib/localResumeFallback";
-import { LANGUAGE_RULE_RESUME } from "@/lib/promptLanguage";
+import { LANGUAGE_RULE_RESUME, languageRule } from "@/lib/promptLanguage";
 
 // ============================================================================
 // Resume Analysis Agent — the ONE master analysis. Detects the candidate's
@@ -18,6 +18,9 @@ interface AnalyzeBody {
   resumeText: string;
   targetRole?: string;
   jobDescription?: string;
+  /** Explicit output language (résumé-derived). When set, output is written in
+   *  this language regardless of any job-description language. */
+  language?: string;
 }
 
 interface ResumeAnalysis {
@@ -72,12 +75,14 @@ export async function POST(req: NextRequest) {
   // dashboard stays populated (field-appropriate) even under an OpenAI 429.
   const localFallback = (reason: string) => {
     const data = analyzeResumeLocally(resumeText, jobDescription);
-    console.log(
-      "[CareerAI] fallback mode because OpenAI", reason,
-      "| profession:", data.profession,
-      "| atsScore:", data.atsScore,
-      "| missingSkills:", data.missingSkills.length
-    );
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        "[CareerAI] fallback mode because OpenAI", reason,
+        "| profession:", data.profession,
+        "| atsScore:", data.atsScore,
+        "| missingSkills:", data.missingSkills.length
+      );
+    }
     return json("demo-fallback", data);
   };
 
@@ -95,7 +100,9 @@ export async function POST(req: NextRequest) {
     "sommelier, air-traffic controller, electrician, translator). Do NOT force the candidate into any " +
     "example category, and never default to a field the resume does not support. Base every value " +
     "strictly on the resume's real content. Return ONLY valid JSON — no markdown, no extra text.\n\n" +
-    LANGUAGE_RULE_RESUME;
+    // Explicit language when the client detected it from the résumé; otherwise
+    // fall back to detecting from the résumé (never from a job description).
+    (body.language ? languageRule(body.language) : LANGUAGE_RULE_RESUME);
 
   const user = `Analyze this resume and detect the candidate's real profession and profile.
 ${jobDescription ? `\nA target job description was also provided — factor it into missingSkills and recommendations:\n${jobDescription.slice(0, 1500)}\n` : ""}

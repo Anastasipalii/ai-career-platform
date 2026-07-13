@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
-import { LANGUAGE_RULE_RESUME } from "@/lib/promptLanguage";
+import { LANGUAGE_RULE_RESUME, languageRule } from "@/lib/promptLanguage";
 
 // ============================================================================
 // Cover Letter Agent — real, personalized cover-letter generation (JSON).
@@ -17,6 +17,8 @@ interface AgentBody {
   resumeText?: string;
   jobDescription?: string;
   tone?: string;
+  /** Explicit output language (résumé-derived); overrides any JD language. */
+  language?: string;
   analysis?: {
     detectedSkills?: string[];
     experienceSummary?: string;
@@ -67,19 +69,13 @@ export async function POST(req: NextRequest) {
   const jobDescription = (body.jobDescription ?? "").trim();
   const tone = (body.tone ?? "Professional").trim();
 
-  // ── DIAGNOSTIC (no behavior change) ───────────────────────────────────────
-  console.log("[CareerAI route:cover-letter] OPENAI_API_KEY present?:", !!process.env.OPENAI_API_KEY, "| resumeText length:", resumeText.length, "| jobDescription length:", jobDescription.length);
-  // ──────────────────────────────────────────────────────────────────────────
-
   // Nothing to work from → generic demo letter, clearly flagged.
   if (!resumeText && !jobDescription) {
-    console.log("[CareerAI route:cover-letter] 4. OpenAI request executed?: NO (no resume text AND no job description) → demo-fallback");
     return json("demo-fallback", DEMO_COVER);
   }
 
-  // No key configured → demo letter, clearly flagged.
+  // No key configured → demo letter (client builds a local resume-based letter).
   if (!process.env.OPENAI_API_KEY) {
-    console.log("[CareerAI route:cover-letter] 4. OpenAI request executed?: NO (key missing) → demo-fallback (client will build a local resume-based letter)");
     return json("demo-fallback", DEMO_COVER);
   }
 
@@ -98,7 +94,7 @@ export async function POST(req: NextRequest) {
     "Do NOT invent an employer/company name, do NOT invent metrics that aren't supported by the resume, and do NOT use bracketed placeholders like [Company] or [Your Name]. " +
     "If the candidate's name is clearly present in the resume, sign off with it; otherwise end with just 'Sincerely,' and no name. " +
     "The letter must be substantial and professional — 400 to 700 words — and follow this structure: greeting; an opening paragraph; a paragraph on professional experience; a paragraph on relevant skills and technologies; a paragraph on why this company/role; a paragraph on why the candidate is a strong fit; and a confident professional closing. Return ONLY valid JSON — no markdown, no extra text.\n\n" +
-    LANGUAGE_RULE_RESUME;
+    (body.language ? languageRule(body.language) : LANGUAGE_RULE_RESUME);
 
   const contextParts: string[] = [];
   if (body.analysis?.experienceSummary) contextParts.push(`Experience summary: ${body.analysis.experienceSummary}`);
@@ -130,7 +126,6 @@ export async function POST(req: NextRequest) {
 
     const raw = completion.choices[0]?.message?.content;
     if (!raw) return json("demo-fallback", DEMO_COVER);
-    console.log("[CareerAI route:cover-letter] 5. OpenAI response received ✓ → live-ai");
 
     const parsed = JSON.parse(raw) as Partial<CoverLetterResult>;
     const data: CoverLetterResult = {

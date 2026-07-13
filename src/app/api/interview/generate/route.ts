@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { withRetryOn429 } from "@/lib/openaiRetry";
-import { LANGUAGE_RULE_INTERVIEW } from "@/lib/promptLanguage";
+import { LANGUAGE_RULE_INTERVIEW, languageRule } from "@/lib/promptLanguage";
 
 type InterviewMode = "quick" | "hr" | "technical" | "full";
 
@@ -52,11 +52,17 @@ export async function POST(req: NextRequest) {
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+  // When an explicit language is provided (résumé-derived) it is authoritative
+  // and output must never follow the job title/description language. Only when
+  // it is missing do we fall back to detecting from context.
+  const languageDirective = language && language.trim()
+    ? languageRule(language)
+    : LANGUAGE_RULE_INTERVIEW;
+
   const system = `You are an expert interview coach. Generate realistic, role-specific interview questions.
 Return ONLY valid JSON — no markdown, no extra text.
 
-${LANGUAGE_RULE_INTERVIEW}
-Requested language (fallback when the context language is ambiguous): ${language || "English (US)"}.`;
+${languageDirective}`;
 
   const user = `Generate exactly ${count} interview questions.
 
@@ -114,14 +120,16 @@ Make every question specific and tailored to the role. Vary the categories appro
       // Surface the exact subtype so the cause is confirmable in the terminal:
       //   insufficient_quota  → billing/credits exhausted (persistent)
       //   rate_limit_exceeded → too many requests/tokens per minute (transient)
-      console.log(
-        "[CareerAI route:interview] OpenAI 429 →",
-        "code:", e?.code ?? "(none)",
-        "| meaning:", e?.code === "insufficient_quota"
-          ? "billing/quota exhausted — add credits"
-          : "rate limit — retry later / spacing helps",
-        "| message:", msg
-      );
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          "[CareerAI route:interview] OpenAI 429 →",
+          "code:", e?.code ?? "(none)",
+          "| meaning:", e?.code === "insufficient_quota"
+            ? "billing/quota exhausted — add credits"
+            : "rate limit — retry later / spacing helps",
+          "| message:", msg
+        );
+      }
       return NextResponse.json(
         { error: "AI generation is temporarily unavailable (rate limit). Local fallback will be used.", code: e?.code ?? "rate_limited" },
         { status: 429 }

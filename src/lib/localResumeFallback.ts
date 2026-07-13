@@ -11,7 +11,7 @@
 // legal skills and legal gaps; a frontend resume produces frontend ones; etc.
 // ============================================================================
 
-import type { ResumeAnalysis, WorkflowJobMatch } from "./workflowRun";
+import type { ResumeAnalysis } from "./workflowRun";
 
 interface ProfessionProfile {
   key: string;
@@ -304,88 +304,4 @@ export function analyzeResumeLocally(resumeText: string, jobDescription = ""): R
       "Lead each bullet with a strong action verb and a measurable result.",
     ],
   };
-}
-
-/** Find the profile that best matches an existing analysis (profession + skills). */
-function profileForAnalysis(analysis: ResumeAnalysis): ProfessionProfile | null {
-  const probe = [analysis.profession, analysis.specialization, ...(analysis.detectedSkills ?? [])].join(" ");
-  return detectProfile(probe);
-}
-
-/** Build resume-based job matches locally from an analysis (field-appropriate). */
-// Cycle through a list starting at `start`, returning up to `n` unique items.
-function rotate(arr: string[], start: number, n: number): string[] {
-  if (arr.length === 0) return [];
-  const out: string[] = [];
-  for (let k = 0; k < Math.min(n, arr.length); k++) out.push(arr[(start + k) % arr.length]);
-  return Array.from(new Set(out));
-}
-
-/**
- * Build 6–8 resume-based role recommendations. Each is tailored to the current
- * profession/specialization/skills — role title, match score, a specific
- * personalised reason, 2–3 matched strengths, 2–3 growth skills, and 1–2
- * learning suggestions. Profession-agnostic (works for any field); never uses
- * the candidate's name or generic "has experience…" phrasing.
- */
-export function matchJobsLocally(analysis: ResumeAnalysis): WorkflowJobMatch[] {
-  const profile = profileForAnalysis(analysis);
-  const prof = (analysis.profession || "Professional").trim();
-  const spec = (analysis.specialization || "").trim();
-  const seniority = (analysis.seniority || "").trim();
-
-  const strengthsPool = (analysis.detectedSkills ?? []).filter(Boolean);
-  const growthPoolRaw = (profile?.missing ?? analysis.missingSkills ?? []).filter(Boolean);
-  const baseStrengths = strengthsPool.length ? strengthsPool : profile?.skills ?? [];
-  const baseGrowth = growthPoolRaw.length
-    ? growthPoolRaw
-    : ["a role-specific certification", "advanced tools for the field"];
-
-  // Role pool: authored field roles + tailored variants → deduped → up to 8.
-  const authored = profile?.roles ?? (prof !== "Professional" ? [prof] : ["Your next role"]);
-  const isSenior = /senior|lead|principal|executive|head|director/i.test(seniority);
-  const variants = [
-    spec ? `${spec} Specialist` : `${prof} Specialist`,
-    `${prof} Consultant`,
-    `${prof} Associate`,
-    isSenior ? `Senior ${prof}` : `Junior ${prof}`,
-    `${prof} Coordinator`,
-  ];
-  const roles = Array.from(new Set([...authored, ...variants]))
-    .filter((r) => r && r.trim().length > 0)
-    .slice(0, 8);
-
-  const scores = [95, 92, 89, 86, 83, 80, 77, 74];
-
-  const reasonFor = (title: string, i: number, strengths: string[]): string => {
-    const focus =
-      strengths[0] && strengths[1]
-        ? `${strengths[0]} and ${strengths[1]}`
-        : strengths[0] || (spec || prof.toLowerCase());
-    const templates = [
-      `Your strongest match — ${title} work centres on ${focus}, which your resume demonstrates directly.`,
-      `A natural next step: ${title} builds on your ${spec || prof.toLowerCase()} background, especially ${focus}.`,
-      `${title} roles prioritise ${focus}; these already read as core competencies in your profile.`,
-      `Well-aligned — the day-to-day of a ${title} maps closely onto your ${focus} experience.`,
-      `${title} extends your ${seniority ? seniority.toLowerCase() + " " : ""}${prof.toLowerCase()} profile into an adjacent track grounded in ${focus}.`,
-      `A practical stretch role: ${title} rewards the ${focus} you bring while broadening your scope.`,
-      `${title} is a strong lateral move, leveraging ${focus} from your background.`,
-      `${title} fits your trajectory, pairing ${focus} with room to take on new responsibilities.`,
-    ];
-    return templates[i % templates.length];
-  };
-
-  return roles.map((title, i) => {
-    const matchedStrengths = rotate(baseStrengths, i, 3);
-    const missingSkills = rotate(baseGrowth, i, 3);
-    const recommendedSkills = rotate(baseGrowth, i + 1, 2);
-    return {
-      title,
-      matchScore: scores[i] ?? Math.max(60, 74 - i),
-      whyMatch: reasonFor(title, i, matchedStrengths),
-      matchedStrengths,
-      missingSkills,
-      recommendedSkills,
-    };
-  });
 }

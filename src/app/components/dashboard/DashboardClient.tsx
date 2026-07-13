@@ -96,6 +96,13 @@ export interface JobMatchRow {
   matchedStrengths?: string[];
   missingSkills?: string[];
   recommendedSkills?: string[];
+  // ── Real provider meta (present for live jobs) ──
+  location?: string | null;
+  remote?: boolean;
+  jobTypes?: string[];
+  publishedAt?: string | null;
+  /** Real provider listing URL (present for live jobs). Opens externally. */
+  sourceUrl?: string;
 }
 
 export interface CareerPathRow {
@@ -190,11 +197,12 @@ export default function DashboardClient() {
           "[CareerAI] STEP 6 dashboard displaying runId:", latestRun.runId ?? "(remote row — no runId)",
           "| completedAt:", latestRun.completedAt,
           "| atsScore:", latestRun.atsScore,
-          "| job matches:", (latestRun.jobMatches ?? []).map((m) => m.title).join(", ") || "(none)",
+          "| stored job match count:", (latestRun.jobMatches ?? []).length,
+          "| firstId:", latestRun.jobMatches?.[0]?.externalId ?? "(none)",
           "| store:", timeOf(localRun) > timeOf(remoteMapped) ? "localStorage" : "supabase"
         );
       } else {
-        console.log("[CareerAI] STEP 6 dashboard displaying runId: (no run found)");
+        console.log("[CareerAI] STEP 6 dashboard displaying runId: (no run found) | stored job match count: 0");
       }
       setWorkflow(latestRun);
 
@@ -365,13 +373,18 @@ export default function DashboardClient() {
   const workflowJobRows: JobMatchRow[] = (workflow?.jobMatches ?? []).map((m, i) => ({
     id: `wf-jm-${i}`,
     job_title: m.title,
-    company_name: null,
+    company_name: m.company ?? null,
     match_score: m.matchScore,
     created_at: workflow?.completedAt ?? new Date().toISOString(),
     why: m.whyMatch,
     matchedStrengths: m.matchedStrengths,
     missingSkills: m.missingSkills,
     recommendedSkills: m.recommendedSkills,
+    location: m.location,
+    remote: m.remote,
+    jobTypes: m.jobTypes,
+    publishedAt: m.publishedAt,
+    sourceUrl: m.sourceUrl,
   }));
   // Prefer the CURRENT run's matches so a fresh upload always drives this
   // section; only fall back to saved job_matches table rows when the run has

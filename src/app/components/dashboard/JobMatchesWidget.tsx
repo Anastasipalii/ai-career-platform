@@ -55,9 +55,6 @@ export default function JobMatchesWidget({ matches, formatRelative }: JobMatches
         <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
           {top.map((match) => {
             const sc = scoreColor(match.match_score ?? 0);
-            const strengths = (match.matchedStrengths ?? []).slice(0, 3);
-            const missing = (match.missingSkills ?? []).slice(0, 3);
-            const learn = (match.recommendedSkills ?? []).slice(0, 2);
             return (
               <div
                 key={match.id}
@@ -78,66 +75,41 @@ export default function JobMatchesWidget({ matches, formatRelative }: JobMatches
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{match.job_title}</p>
-                    <span
-                      className="shrink-0 text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded"
-                      style={{ color: "#c4b5fd", background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)" }}
-                    >
-                      {match.company_name ?? "Resume match"}
-                    </span>
-                  </div>
-
-                  {match.why && (
-                    <p className="text-xs text-slate-400 mt-1 leading-snug">{match.why}</p>
+                  <p className="text-sm font-medium text-white truncate">{match.job_title}</p>
+                  {match.company_name && (
+                    <p className="text-[12px] text-slate-300 truncate mt-0.5">{match.company_name}</p>
                   )}
 
-                  {strengths.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      <span className="text-[10px] uppercase tracking-wide text-slate-600">Strengths</span>
-                      {strengths.map((s) => (
-                        <span
-                          key={s}
-                          className="px-1.5 py-0.5 rounded text-[10px]"
-                          style={{ background: "rgba(16,185,129,0.12)", color: "#34d399", border: "1px solid rgba(16,185,129,0.28)" }}
-                        >
-                          {s}
-                        </span>
-                      ))}
+                  {(match.location || match.remote || (match.jobTypes && match.jobTypes.length) || match.publishedAt) && (
+                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                      {[
+                        match.location || null,
+                        match.remote ? "Remote" : null,
+                        match.jobTypes && match.jobTypes.length ? match.jobTypes.join(" / ") : null,
+                        match.publishedAt ? formatRelative(match.publishedAt) : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
+
+                  {/* Strengths / missing / learn-next are stored on the run but
+                      intentionally hidden on the compact card (kept for a future
+                      detailed vacancy page). */}
+                  {/* Opens the REAL provider listing in a new tab — never submits. */}
+                  {match.sourceUrl && (
+                    <div className="mt-1.5">
+                      <a
+                        href={match.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-medium hover:underline"
+                        style={{ color: "#7dd3fc" }}
+                      >
+                        View &amp; apply ↗
+                      </a>
                     </div>
                   )}
-
-                  {missing.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      <span className="text-[10px] uppercase tracking-wide text-slate-600">Missing</span>
-                      {missing.map((s) => (
-                        <span
-                          key={s}
-                          className="px-1.5 py-0.5 rounded text-[10px]"
-                          style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.28)" }}
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {learn.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                      <span className="text-[10px] uppercase tracking-wide text-slate-600">Learn next</span>
-                      {learn.map((s) => (
-                        <span
-                          key={s}
-                          className="px-1.5 py-0.5 rounded text-[10px]"
-                          style={{ background: "rgba(124,58,237,0.1)", color: "#c4b5fd", border: "1px solid rgba(124,58,237,0.28)" }}
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <p className="text-[10px] text-slate-600 mt-1.5">{formatRelative(match.created_at)}</p>
                 </div>
               </div>
             );

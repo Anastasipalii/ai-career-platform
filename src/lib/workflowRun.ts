@@ -56,7 +56,10 @@ export interface CoverLetterResult {
   toneSuggestions: string[];
 }
 
-/** A single job match (mirrors /api/job-match/agent + the workflow outputs). */
+/** A single job match (mirrors /api/job-match/agent + the workflow outputs).
+ *  For real provider jobs the identity fields (externalId/provider/company/
+ *  sourceUrl/applyUrl) come straight from the provider and are preserved through
+ *  ranking and persistence — the AI only adds score/explanation/skills. */
 export interface WorkflowJobMatch {
   title: string;
   company?: string;
@@ -66,6 +69,17 @@ export interface WorkflowJobMatch {
   matchedStrengths?: string[];
   missingSkills: string[];
   recommendedSkills: string[];
+  // ── Real-provider identity (present for live jobs; preserved end-to-end) ──
+  externalId?: string;
+  provider?: string;
+  location?: string | null;
+  remote?: boolean;
+  jobTypes?: string[];
+  sourceUrl?: string;
+  applyUrl?: string;
+  publishedAt?: string | null;
+  /** True only for stress/demo synthetic matches — never for production. */
+  synthetic?: boolean;
 }
 
 /** Payload written to the workflow_runs table by the legacy one-shot save. */
