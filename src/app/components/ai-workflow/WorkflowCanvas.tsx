@@ -536,6 +536,10 @@ export default function WorkflowCanvas() {
     );
     // ────────────────────────────────────────────────────────────────────────
     void saveWorkflowRun({
+      // Idempotency: the run's unique id doubles as the run_key so re-saving the
+      // same run never creates a duplicate workflow_runs row.
+      runKey: runId || undefined,
+      mode: "production",
       resumeName: usedResume ? resumeFileName ?? "Pasted resume" : "Demo run",
       resumePreview: usedResume ? resumeText.slice(0, 300) : "",
       analysis: analysisRecord,

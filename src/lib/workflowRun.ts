@@ -1,16 +1,31 @@
 // ============================================================================
-// workflowRun — Supabase persistence for completed AI Workflow runs
+// workflowRun — Supabase persistence for AI Workflow runs (Phase 1 lifecycle)
 // ----------------------------------------------------------------------------
-// Writes/reads a single row in the additive `workflow_runs` table using the
-// existing browser Supabase client under the user's session (RLS enforced,
-// same as every other feature). Every call is best-effort and wrapped in
-// try/catch — a failure NEVER blocks the UI; the caller falls back to
-// localStorage. No auth changes, no service role, no env changes.
+// Uses the existing browser Supabase client under the user's session, so RLS
+// enforces owner-only access (no service-role key on the client). Every call is
+// best-effort and returns a STRUCTURED result — database errors are surfaced,
+// never silently swallowed, and never carry stack traces or secrets.
+//
+// Reads use select("*") + a JS mode filter so they work BOTH before and after
+// the Phase 1 migration is applied (existing history stays readable either way).
 // ============================================================================
 
 import { supabase } from "./supabase";
 
 export type ResultSource = "live-ai" | "demo-fallback";
+
+/** Where a run is executed. Keeps production data cleanly separated from
+ *  stress-test traffic and demo/sample runs. */
+export type WorkflowMode = "production" | "stress" | "demo";
+
+/** Lifecycle state of a run. */
+export type WorkflowStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+/** Structured result — callers can branch on `ok` without try/catch, and the
+ *  error carries a safe code + human message (no stack traces / secrets). */
+export type Result<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: string; message: string } };
 
 /** Master resume analysis (mirrors /api/resume/analyze) — the single,
  *  profession-agnostic source of truth that drives every downstream module. */
@@ -53,8 +68,11 @@ export interface WorkflowJobMatch {
   recommendedSkills: string[];
 }
 
-/** Payload written to the workflow_runs table. */
+/** Payload written to the workflow_runs table by the legacy one-shot save. */
 export interface WorkflowRunInput {
+  /** Idempotency key — reusing the same value never creates a duplicate run. */
+  runKey?: string;
+  mode?: WorkflowMode;
   resumeName: string;
   resumePreview: string;
   analysis: ResumeAnalysis;
@@ -66,7 +84,9 @@ export interface WorkflowRunInput {
   completedAt: string; // ISO
 }
 
-/** Row shape read back from workflow_runs. */
+/** Row shape read back from workflow_runs. Original columns are required for the
+ *  Dashboard; lifecycle columns are optional so rows written before the Phase 1
+ *  migration (which lack them) still type-check. */
 export interface WorkflowRunRow {
   resume_name: string | null;
   resume_preview: string | null;
@@ -77,84 +97,412 @@ export interface WorkflowRunRow {
   interview: Record<string, unknown> | null;
   source: ResultSource | null;
   completed_at: string;
+  // ── Phase 1 lifecycle (present after the migration) ──
+  id?: string;
+  run_key?: string;
+  user_id?: string;
+  mode?: WorkflowMode;
+  status?: WorkflowStatus;
+  current_step?: string | null;
+  progress?: number | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  updated_at?: string | null;
+  created_at?: string;
+}
+
+/** Params for a single observable event row. */
+export interface WorkflowEventInput {
+  runId: string;
+  mode?: WorkflowMode;
+  step?: string;
+  status?: WorkflowStatus | string;
+  progress?: number;
+  message?: string;
+  durationMs?: number;
+  metadata?: Record<string, unknown>;
 }
 
 const clampScore = (n: number): number => Math.min(100, Math.max(0, Math.round(n || 0)));
+const clampProgress = (n: number | undefined): number | undefined =>
+  n === undefined ? undefined : Math.min(100, Math.max(0, Math.round(n)));
 
-/** Persist a run. Returns { ok } — false when there is no session or the write fails. */
-export async function saveWorkflowRun(input: WorkflowRunInput): Promise<{ ok: boolean }> {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.log("[CareerAI] 7. workflow_runs insert SKIPPED — no Supabase session (Dashboard will use localStorage).");
-      return { ok: false };
-    }
-
-    const { error } = await supabase.from("workflow_runs").insert({
-      user_id: session.user.id,
-      resume_name: input.resumeName,
-      resume_preview: input.resumePreview,
-      analysis: input.analysis,
-      ats_score: clampScore(input.atsScore),
-      cover_letter: input.coverLetter,
-      job_match: input.jobMatch,
-      interview: input.interview,
-      source: input.source,
-      completed_at: input.completedAt,
-    });
-    if (error) {
-      console.log("[CareerAI] 7. workflow_runs insert FAILED:", error.message, "(table missing? run the migration). Dashboard will use localStorage.");
-    } else {
-      console.log("[CareerAI] 7. workflow_runs insert OK → source:", input.source, "| completedAt:", input.completedAt);
-    }
-    return { ok: !error };
-  } catch {
-    return { ok: false };
-  }
+/** Build a structured error without leaking stack traces or secrets. */
+function fail<T = never>(code: string, message: string): Result<T> {
+  return { ok: false, error: { code, message } };
 }
 
-/** Read the most recent run for the current user, or null if none/unavailable. */
-export async function readLatestWorkflowRun(): Promise<WorkflowRunRow | null> {
+/** Normalize a Supabase/unknown error into a safe { code, message }. */
+function toSafeError(e: unknown, fallbackCode: string): { code: string; message: string } {
+  const obj = (e ?? {}) as { code?: string; message?: string };
+  const code = typeof obj.code === "string" && obj.code ? obj.code : fallbackCode;
+  const message =
+    typeof obj.message === "string" && obj.message ? obj.message : "Database request failed.";
+  return { code, message };
+}
+
+/** Current user id, or null when there is no session (RLS requires it). */
+async function getSessionUserId(): Promise<string | null> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
-
-    const { data, error } = await supabase
-      .from("workflow_runs")
-      .select(
-        "resume_name, resume_preview, analysis, ats_score, cover_letter, job_match, interview, source, completed_at"
-      )
-      .eq("user_id", session.user.id)
-      .order("completed_at", { ascending: false })
-      .limit(1);
-
-    if (error || !data || data.length === 0) return null;
-    return data[0] as WorkflowRunRow;
+    const { data } = await supabase.auth.getSession();
+    return data.session?.user.id ?? null;
   } catch {
     return null;
   }
 }
 
-/** Read the most recent runs (newest first) so the Dashboard can show the
- *  latest run in its widgets while keeping previous runs visible in history.
- *  Each Run Pipeline is a separate row — this never overwrites earlier runs. */
+// ── Lifecycle API ───────────────────────────────────────────────────────────
+
+/**
+ * Create (or idempotently reuse) a workflow run. Reusing the same `runKey`
+ * NEVER creates a duplicate — it returns the existing run's id instead.
+ */
+export async function createWorkflowRun(params: {
+  runKey: string;
+  mode?: WorkflowMode;
+  status?: WorkflowStatus;
+  currentStep?: string;
+  resumeName?: string;
+  resumePreview?: string;
+  source?: ResultSource;
+}): Promise<Result<{ id: string; runKey: string }>> {
+  const uid = await getSessionUserId();
+  if (!uid) return fail("no_session", "No authenticated session; run not persisted.");
+
+  try {
+    // Idempotent insert: on run_key conflict, keep the existing row.
+    const { error: upsertError } = await supabase
+      .from("workflow_runs")
+      .upsert(
+        {
+          user_id: uid,
+          run_key: params.runKey,
+          mode: params.mode ?? "production",
+          status: params.status ?? "running",
+          current_step: params.currentStep ?? "queued",
+          progress: 0,
+          resume_name: params.resumeName ?? null,
+          resume_preview: params.resumePreview ?? null,
+          source: params.source ?? "demo-fallback",
+          started_at: new Date().toISOString(),
+        },
+        { onConflict: "run_key", ignoreDuplicates: true }
+      );
+    if (upsertError) {
+      const e = toSafeError(upsertError, "insert_failed");
+      console.warn("[workflowRun] createWorkflowRun insert failed:", e.code, e.message);
+      return { ok: false, error: e };
+    }
+
+    // Fetch the id (whether just inserted or pre-existing) for event logging.
+    const { data, error: selError } = await supabase
+      .from("workflow_runs")
+      .select("id, run_key")
+      .eq("run_key", params.runKey)
+      .eq("user_id", uid)
+      .limit(1)
+      .maybeSingle();
+    if (selError) {
+      const e = toSafeError(selError, "select_failed");
+      console.warn("[workflowRun] createWorkflowRun lookup failed:", e.code, e.message);
+      return { ok: false, error: e };
+    }
+    if (!data?.id) return fail("not_found", "Run could not be created or located.");
+    return { ok: true, data: { id: data.id as string, runKey: params.runKey } };
+  } catch (e) {
+    const err = toSafeError(e, "unexpected");
+    console.warn("[workflowRun] createWorkflowRun error:", err.code, err.message);
+    return { ok: false, error: err };
+  }
+}
+
+/** Advance a run's status / current step / progress. */
+export async function updateWorkflowRunStatus(params: {
+  runKey: string;
+  status?: WorkflowStatus;
+  currentStep?: string;
+  progress?: number;
+}): Promise<Result<{ runKey: string }>> {
+  const uid = await getSessionUserId();
+  if (!uid) return fail("no_session", "No authenticated session; run not updated.");
+
+  const patch: Record<string, unknown> = {};
+  if (params.status !== undefined) patch.status = params.status;
+  if (params.currentStep !== undefined) patch.current_step = params.currentStep;
+  const p = clampProgress(params.progress);
+  if (p !== undefined) patch.progress = p;
+  if (Object.keys(patch).length === 0) return { ok: true, data: { runKey: params.runKey } };
+
+  try {
+    const { error } = await supabase
+      .from("workflow_runs")
+      .update(patch)
+      .eq("run_key", params.runKey)
+      .eq("user_id", uid);
+    if (error) {
+      const e = toSafeError(error, "update_failed");
+      console.warn("[workflowRun] updateWorkflowRunStatus failed:", e.code, e.message);
+      return { ok: false, error: e };
+    }
+    return { ok: true, data: { runKey: params.runKey } };
+  } catch (e) {
+    const err = toSafeError(e, "unexpected");
+    console.warn("[workflowRun] updateWorkflowRunStatus error:", err.code, err.message);
+    return { ok: false, error: err };
+  }
+}
+
+/** Append one row to the observable workflow_events log. */
+export async function recordWorkflowEvent(
+  event: WorkflowEventInput
+): Promise<Result<{ id: string }>> {
+  const uid = await getSessionUserId();
+  if (!uid) return fail("no_session", "No authenticated session; event not recorded.");
+
+  try {
+    const { data, error } = await supabase
+      .from("workflow_events")
+      .insert({
+        run_id: event.runId,
+        user_id: uid,
+        mode: event.mode ?? "production",
+        step: event.step ?? null,
+        status: event.status ?? null,
+        progress: clampProgress(event.progress) ?? null,
+        message: event.message ?? null,
+        duration_ms: event.durationMs ?? null,
+        metadata: event.metadata ?? {},
+      })
+      .select("id")
+      .single();
+    if (error) {
+      const e = toSafeError(error, "event_insert_failed");
+      console.warn("[workflowRun] recordWorkflowEvent failed:", e.code, e.message);
+      return { ok: false, error: e };
+    }
+    return { ok: true, data: { id: data.id as string } };
+  } catch (e) {
+    const err = toSafeError(e, "unexpected");
+    console.warn("[workflowRun] recordWorkflowEvent error:", err.code, err.message);
+    return { ok: false, error: err };
+  }
+}
+
+/** Mark a run completed and store its results; also logs a completion event. */
+export async function completeWorkflowRun(params: {
+  runKey: string;
+  analysis?: ResumeAnalysis | null;
+  atsScore?: number;
+  coverLetter?: CoverLetterResult | Record<string, unknown> | null;
+  jobMatch?: Record<string, unknown> | null;
+  interview?: Record<string, unknown> | null;
+  source?: ResultSource;
+}): Promise<Result<{ id: string }>> {
+  const uid = await getSessionUserId();
+  if (!uid) return fail("no_session", "No authenticated session; run not completed.");
+
+  const patch: Record<string, unknown> = {
+    status: "completed",
+    current_step: "completed",
+    progress: 100,
+    completed_at: new Date().toISOString(),
+  };
+  if (params.analysis !== undefined) patch.analysis = params.analysis ?? {};
+  if (params.atsScore !== undefined) patch.ats_score = clampScore(params.atsScore);
+  if (params.coverLetter !== undefined) patch.cover_letter = params.coverLetter ?? {};
+  if (params.jobMatch !== undefined) patch.job_match = params.jobMatch ?? {};
+  if (params.interview !== undefined) patch.interview = params.interview ?? {};
+  if (params.source !== undefined) patch.source = params.source;
+
+  try {
+    const { data, error } = await supabase
+      .from("workflow_runs")
+      .update(patch)
+      .eq("run_key", params.runKey)
+      .eq("user_id", uid)
+      .select("id, mode")
+      .maybeSingle();
+    if (error) {
+      const e = toSafeError(error, "complete_failed");
+      console.warn("[workflowRun] completeWorkflowRun failed:", e.code, e.message);
+      return { ok: false, error: e };
+    }
+    if (!data?.id) return fail("not_found", "Run to complete was not found.");
+
+    // Best-effort event (never overrides the completion result).
+    await recordWorkflowEvent({
+      runId: data.id as string,
+      mode: (data.mode as WorkflowMode) ?? "production",
+      step: "completed",
+      status: "completed",
+      progress: 100,
+      message: "Workflow run completed.",
+      metadata: { source: params.source ?? null },
+    });
+    return { ok: true, data: { id: data.id as string } };
+  } catch (e) {
+    const err = toSafeError(e, "unexpected");
+    console.warn("[workflowRun] completeWorkflowRun error:", err.code, err.message);
+    return { ok: false, error: err };
+  }
+}
+
+/** Mark a run failed with a safe error code/message; also logs a failure event. */
+export async function failWorkflowRun(params: {
+  runKey: string;
+  errorCode: string;
+  errorMessage: string;
+  currentStep?: string;
+}): Promise<Result<{ id: string }>> {
+  const uid = await getSessionUserId();
+  if (!uid) return fail("no_session", "No authenticated session; run not marked failed.");
+
+  try {
+    const { data, error } = await supabase
+      .from("workflow_runs")
+      .update({
+        status: "failed",
+        current_step: params.currentStep ?? "failed",
+        error_code: params.errorCode,
+        error_message: params.errorMessage,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("run_key", params.runKey)
+      .eq("user_id", uid)
+      .select("id, mode")
+      .maybeSingle();
+    if (error) {
+      const e = toSafeError(error, "fail_update_failed");
+      console.warn("[workflowRun] failWorkflowRun failed:", e.code, e.message);
+      return { ok: false, error: e };
+    }
+    if (!data?.id) return fail("not_found", "Run to fail was not found.");
+
+    await recordWorkflowEvent({
+      runId: data.id as string,
+      mode: (data.mode as WorkflowMode) ?? "production",
+      step: params.currentStep ?? "failed",
+      status: "failed",
+      message: params.errorMessage,
+      metadata: { errorCode: params.errorCode },
+    });
+    return { ok: true, data: { id: data.id as string } };
+  } catch (e) {
+    const err = toSafeError(e, "unexpected");
+    console.warn("[workflowRun] failWorkflowRun error:", err.code, err.message);
+    return { ok: false, error: err };
+  }
+}
+
+// ── Legacy one-shot save (kept so the current pipeline is unchanged) ──────────
+
+/**
+ * Persist a completed run in a single idempotent write, and log one completion
+ * event. Reusing the same `runKey` updates that row instead of duplicating it.
+ * Returns { ok } for backward compatibility with the existing call site.
+ */
+export async function saveWorkflowRun(input: WorkflowRunInput): Promise<{ ok: boolean }> {
+  const uid = await getSessionUserId();
+  if (!uid) {
+    console.log("[CareerAI] workflow_runs save SKIPPED — no session (Dashboard uses localStorage).");
+    return { ok: false };
+  }
+
+  const runKey =
+    input.runKey ??
+    (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `run-${Date.now()}`);
+  const mode: WorkflowMode = input.mode ?? "production";
+
+  try {
+    const { data, error } = await supabase
+      .from("workflow_runs")
+      .upsert(
+        {
+          user_id: uid,
+          run_key: runKey,
+          mode,
+          status: "completed",
+          current_step: "completed",
+          progress: 100,
+          resume_name: input.resumeName,
+          resume_preview: input.resumePreview,
+          analysis: input.analysis,
+          ats_score: clampScore(input.atsScore),
+          cover_letter: input.coverLetter,
+          job_match: input.jobMatch,
+          interview: input.interview,
+          source: input.source,
+          started_at: input.completedAt,
+          completed_at: input.completedAt,
+        },
+        { onConflict: "run_key" }
+      )
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      console.warn(
+        "[CareerAI] workflow_runs save FAILED:",
+        error.code ?? "",
+        error.message,
+        "(apply supabase/phase1_workflow_lifecycle.sql?). Dashboard uses localStorage."
+      );
+      return { ok: false };
+    }
+
+    if (data?.id) {
+      // Best-effort observable event; failure never blocks the save result.
+      await recordWorkflowEvent({
+        runId: data.id as string,
+        mode,
+        step: "completed",
+        status: "completed",
+        progress: 100,
+        message: "Run completed and synced to dashboard.",
+        metadata: { source: input.source },
+      });
+    }
+    console.log("[CareerAI] workflow_runs save OK → runKey:", runKey, "| source:", input.source);
+    return { ok: true };
+  } catch (e) {
+    const err = toSafeError(e, "unexpected");
+    console.warn("[CareerAI] workflow_runs save error:", err.code, err.message);
+    return { ok: false };
+  }
+}
+
+// ── Reads (tolerant of pre-/post-migration schema) ───────────────────────────
+
+/** Read the most recent runs (newest first), excluding stress-test traffic.
+ *  Uses select("*") so it works whether or not the Phase 1 columns exist yet. */
 export async function readRecentWorkflowRuns(limit = 10): Promise<WorkflowRunRow[]> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return [];
+    const uid = await getSessionUserId();
+    if (!uid) return [];
 
     const { data, error } = await supabase
       .from("workflow_runs")
-      .select(
-        "resume_name, resume_preview, analysis, ats_score, cover_letter, job_match, interview, source, completed_at"
-      )
-      .eq("user_id", session.user.id)
+      .select("*")
+      .eq("user_id", uid)
       .order("completed_at", { ascending: false })
-      .limit(limit);
+      .limit(Math.max(1, limit) * 2); // fetch extra, then drop stress rows in JS
 
-    if (error || !data) return [];
-    return data as WorkflowRunRow[];
+    if (error) {
+      console.warn("[workflowRun] readRecentWorkflowRuns failed:", error.code ?? "", error.message);
+      return [];
+    }
+    const rows = (data ?? []) as WorkflowRunRow[];
+    // Keep production + demo; hide stress-test runs. Rows written before the
+    // migration have no `mode` and are treated as production (kept).
+    return rows.filter((r) => r.mode !== "stress").slice(0, limit);
   } catch {
     return [];
   }
+}
+
+/** Read the most recent run for the current user, or null if none/unavailable. */
+export async function readLatestWorkflowRun(): Promise<WorkflowRunRow | null> {
+  const rows = await readRecentWorkflowRuns(1);
+  return rows[0] ?? null;
 }
