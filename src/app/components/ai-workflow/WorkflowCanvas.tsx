@@ -7,10 +7,19 @@ import { MOCK_OUTPUTS, type WorkflowOutputs, type JobMatch } from "./mockOutputs
 import { saveWorkflowResults, clearWorkflowResults } from "@/lib/workflowResults";
 import {
   saveWorkflowRun,
+  createWorkflowRun,
+  completeWorkflowRun,
+  failWorkflowRun,
+  startStageEvent,
+  completeStageEvent,
+  failStageEvent,
   type ResultSource,
   type ResumeAnalysis,
   type CoverLetterResult,
+  type WorkflowMode,
 } from "@/lib/workflowRun";
+import { StageTracker, type StageRecorder } from "@/lib/workflow/productionStages";
+import type { WorkflowStage } from "@/lib/workflow/stages";
 import { analyzeResumeLocally } from "@/lib/localResumeFallback";
 import type { NormalizedJob } from "@/lib/jobs/types";
 import { jobHasDomainMatch, acceptJobMatch, MIN_MATCH_SCORE } from "@/lib/jobs/relevance";
@@ -35,6 +44,31 @@ interface AiRunResult {
   outputs: WorkflowOutputs;
   analysis: ResumeAnalysis | null;
   cover: CoverLetterResult | null;
+  // Monitoring telemetry (never PII): the stage at which the run fatally failed
+  // (if any), the résumé language, and how many real jobs were found.
+  fatalStage?: WorkflowStage;
+  resumeLanguage?: string;
+  jobsFound?: number;
+}
+
+/** Build a best-effort DB stage recorder bound to a persisted run row. Uses the
+ *  existing stage-event helpers so each stage emits real begin + terminal events
+ *  with true timestamps/duration. All writes are best-effort (never block the
+ *  run) and carry NO résumé/cover-letter/interview text or PII. */
+function makeStageRecorder(runDbId: string, mode: WorkflowMode): StageRecorder {
+  const startedAt: Partial<Record<string, string>> = {};
+  return {
+    async begin(stage) {
+      const r = await startStageEvent({ runId: runDbId, stage, mode });
+      if (r.ok) startedAt[stage] = r.data.startedAt;
+    },
+    async end(stage) {
+      await completeStageEvent({ runId: runDbId, stage, mode, startedAt: startedAt[stage] });
+    },
+    async fail(stage, errorCode, errorMessage) {
+      await failStageEvent({ runId: runDbId, stage, mode, startedAt: startedAt[stage], errorCode, errorMessage });
+    },
+  };
 }
 
 // Map real AI results onto the existing WorkflowOutputs shape. Fields the
@@ -238,7 +272,8 @@ function buildLocalInterviewQuestions(analysis: ResumeAnalysis | null, role: str
 async function runRealAI(
   resumeText: string,
   jobDescription: string,
-  runId: string
+  runId: string,
+  tracker?: StageTracker
 ): Promise<AiRunResult> {
   const fallback: AiRunResult = {
     source: "demo-fallback",
@@ -256,8 +291,13 @@ async function runRealAI(
   const resumeLanguage = detectResumeLanguage(resumeText);
   devLog(`[CareerAI][${runId}] STEP 0 resume language:`, resumeLanguage);
 
+  // Stage: resume_uploaded — input ingested for this run.
+  await tracker?.begin("resume_uploaded");
+  await tracker?.end("resume_uploaded");
+
   // 1) Resume analysis — only when an actual resume was provided. The detected
   //    language is passed explicitly so the analysis is written in it.
+  await tracker?.begin("resume_analysis");
   let analysis: ResumeAnalysis | null = null;
   let analysisLive = false;
   if (resumeText) {
@@ -280,7 +320,10 @@ async function runRealAI(
       analysisLive = false;
     }
   }
+  await tracker?.end("resume_analysis");
 
+  // Stage: profile_created — build the Candidate Profile.
+  await tracker?.begin("profile_created");
   // 2) Candidate Profile — the SINGLE source of truth for the rest of the run.
   //    Profession/targetRole come from the résumé here and are NEVER rebuilt
   //    from provider job titles later.
@@ -295,6 +338,7 @@ async function runRealAI(
     "| relevantSkills:", profile.relevantSkills.slice(0, 8),
     "| source:", analysisLive ? "live-ai" : "local"
   );
+  await tracker?.end("profile_created");
 
   // 3) Job matches — PRODUCTION uses REAL provider listings only. Step 3a
   //    fetches real jobs from /api/jobs/search; step 3b asks OpenAI to rank and
@@ -317,6 +361,8 @@ async function runRealAI(
     "| requiredDomainTerms:", requiredDomainTerms,
     "| optionalModifiers:", profile.optionalModifiers
   );
+  // Stage: job_search — real provider lookup (never in simulation mode).
+  await tracker?.begin("job_search");
   try {
     const sJson = await postJson("/api/jobs/search", {
       query: searchQuery,
@@ -326,13 +372,15 @@ async function runRealAI(
     });
     const realJobs =
       sJson.ok === true && Array.isArray(sJson.jobs) ? (sJson.jobs as NormalizedJob[]) : null;
+    await tracker?.end("job_search");
     if (!realJobs) {
       // Provider failed / returned an error → show an explicit unavailable state.
       jobsUnavailable = true;
       devLog(`[CareerAI][${runId}] jobs/search unavailable → real job data unavailable state`);
     } else {
-      // STRICT relevance gate (title/tags only): discard off-domain jobs BEFORE
-      // ranking, so the LLM never receives — and can never rescue — them.
+      // Stage: job_filtering — strict relevance gate (title/tags only): discard
+      // off-domain jobs BEFORE ranking, so the LLM never receives them.
+      await tracker?.begin("job_filtering");
       const qualified = realJobs.filter((j) => jobHasDomainMatch(j, requiredDomainTerms));
       const rejected = realJobs.filter((j) => !jobHasDomainMatch(j, requiredDomainTerms));
       devLog(
@@ -342,6 +390,10 @@ async function runRealAI(
         "| rejected sample (no domain term in title/tags):",
         rejected.slice(0, 3).map((j) => j.title)
       );
+      await tracker?.end("job_filtering");
+      // Stage: job_ranking — LLM ranks ONLY domain-qualified real jobs (or a
+      // no-op when there are none; Branch B still proceeds afterwards).
+      await tracker?.begin("job_ranking");
       if (qualified.length > 0) {
         const jJson = await postJson("/api/job-match/agent", {
           resumeText,
@@ -368,6 +420,7 @@ async function runRealAI(
       } else {
         devLog(`[CareerAI][${runId}] STEP 5 ranked: 0 (no domain-qualified listings)`);
       }
+      await tracker?.end("job_ranking");
       // No domain-qualified or accepted listings → matches stays [] (truthful
       // "no relevant live vacancies" state; the provider itself worked).
     }
@@ -375,6 +428,8 @@ async function runRealAI(
     jobsUnavailable = true;
     devLog(`[CareerAI][${runId}] jobs/search request failed:`, (e as Error)?.message);
   }
+  // Close any job stage left active by an early provider failure (self-heals).
+  await tracker?.end();
 
   // Annotate each REAL match with the candidate's own matched strengths (resume-
   // derived, not job data). This never alters provider identity fields.
@@ -400,6 +455,10 @@ async function runRealAI(
       (jobsUnavailable ? "(real job data unavailable)" : "(none)")
   );
 
+  // Stage: ats_analysis — Branch B ALWAYS runs, even with zero relevant jobs.
+  await tracker?.begin("ats_analysis");
+  await tracker?.end("ats_analysis");
+
   // Role for the cover letter & interview context — ALWAYS the résumé-derived
   // role from the Candidate Profile, NEVER the provider job title (which would
   // leak the provider's language and off-domain wording).
@@ -409,6 +468,8 @@ async function runRealAI(
   const builtJobDescription = buildJobDescription(role, analysis, matches[0], jobDescription);
 
   // 6) Cover letter — résumé-primary, written in the résumé language (explicit).
+  // Stage: cover_letter (Branch B).
+  await tracker?.begin("cover_letter");
   let apiCover: CoverLetterResult | null = null;
   let coverLive = false;
   try {
@@ -438,13 +499,20 @@ async function runRealAI(
     "| first 120 chars:", JSON.stringify((cover?.coverLetter ?? "").slice(0, 120))
   );
 
-  // Nothing real was generated (no resume AND the API produced nothing).
-  if (!cover) return fallback;
+  // Nothing real was generated (no resume AND the API produced nothing) — this
+  // is the only fatal path: record the failing stage and stop (never stuck).
+  if (!cover) {
+    await tracker?.fail("cover_letter", "cover_letter_empty", "No cover letter could be generated.");
+    return { ...fallback, fatalStage: "cover_letter", resumeLanguage, jobsFound: matches.length };
+  }
+  await tracker?.end("cover_letter");
 
   // 6) Interview questions — role-specific (resilient; a failure here never
   //    discards the cover letter or matches). On a 429 / error / empty result
   //    the interview route yields no questions; we then build profession-based
   //    questions LOCALLY so this stage is never empty when a resume exists.
+  // Stage: interview_questions (Branch B).
+  await tracker?.begin("interview_questions");
   let questions: string[] = [];
   let interviewLive = false;
   try {
@@ -474,6 +542,7 @@ async function runRealAI(
     "| language:", resumeLanguage,
     "| first 2:", JSON.stringify(questions.slice(0, 2))
   );
+  await tracker?.end("interview_questions");
 
   // "Live" only when the cover letter (and analysis, when a resume exists) came
   // from live AI.
@@ -496,6 +565,8 @@ async function runRealAI(
     outputs: mapToOutputs(analysis, cover, matches, questions, role, jobsUnavailable),
     analysis,
     cover,
+    resumeLanguage,
+    jobsFound: matches.length,
   };
 }
 
@@ -517,13 +588,18 @@ export default function WorkflowCanvas() {
   // Unique id for the current run — every persisted section is stamped with it
   // so the dashboard can prove it is reading ONE fresh run, not stale data.
   const runIdRef = useRef<string>("");
+  // Monitoring: real run start time + the persisted DB row id (for stage events
+  // and duration). Set at kickoff; null when there is no session/DB row.
+  const runStartedAtRef = useRef<number>(0);
+  const dbRunIdRef = useRef<string | null>(null);
 
   // Persist a completed run to localStorage (always) + Supabase (best-effort).
   const persistRun = (
     outputs: WorkflowOutputs,
     source: ResultSource | null,
     analysis: ResumeAnalysis | null,
-    cover: CoverLetterResult | null
+    cover: CoverLetterResult | null,
+    meta: { fatalStage?: WorkflowStage; resumeLanguage?: string; jobsFound?: number } = {}
   ) => {
     const runId = runIdRef.current;
     const completedAt = new Date().toISOString();
@@ -606,29 +682,80 @@ export default function WorkflowCanvas() {
       outputs.jobMatches.length,
       "| firstId:", outputs.jobMatches[0]?.externalId ?? "(none)"
     );
-    void saveWorkflowRun({
-      // Idempotency: the run's unique id doubles as the run_key so re-saving the
-      // same run never creates a duplicate workflow_runs row.
-      runKey: runId || undefined,
-      mode: "production",
-      resumeName: usedResume ? resumeFileName ?? "Pasted resume" : "Demo run",
-      resumePreview: usedResume ? resumeText.slice(0, 300) : "",
-      analysis: analysisRecord,
-      atsScore: clamp100(outputs.ats.score),
-      coverLetter: coverRecord,
-      jobMatch: {
-        count: outputs.jobMatches.length,
-        topFit: outputs.jobMatches.reduce((m, j) => Math.max(m, j.matchScore), 0),
-        matches: outputs.jobMatches,
-      },
-      interview: {
-        questions: outputs.interviewQuestions,
-        count: outputs.interviewQuestions.length,
-        readiness: 78,
-      },
-      source: resolvedSource,
-      completedAt,
-    });
+    const jobMatchRecord = {
+      count: outputs.jobMatches.length,
+      topFit: outputs.jobMatches.reduce((m, j) => Math.max(m, j.matchScore), 0),
+      matches: outputs.jobMatches,
+    };
+    const interviewRecord = {
+      questions: outputs.interviewQuestions,
+      count: outputs.interviewQuestions.length,
+      readiness: 78,
+    };
+
+    // A REAL production run created a DB row at kickoff (dbRunIdRef): finalize
+    // its lifecycle so the row carries the full stage timeline + a real
+    // duration. Otherwise (demo run / no session) keep the original one-shot
+    // upsert (a single completed event) — behaviour unchanged.
+    if (dbRunIdRef.current) {
+      const dbId = dbRunIdRef.current;
+      const durationMs = runStartedAtRef.current
+        ? Math.max(0, Date.now() - runStartedAtRef.current)
+        : undefined;
+      const mode: WorkflowMode = "production";
+      void (async () => {
+        if (meta.fatalStage) {
+          // Never leave the run stuck in running: mark it failed at its stage.
+          await failWorkflowRun({
+            runKey: runId,
+            errorCode: "production_stage_failed",
+            errorMessage: `Run failed at ${meta.fatalStage}.`,
+            currentStep: meta.fatalStage,
+            durationMs,
+          });
+          return;
+        }
+        // Stage: persistence — wraps the final DB write.
+        const p = await startStageEvent({ runId: dbId, stage: "persistence", mode });
+        await completeStageEvent({
+          runId: dbId,
+          stage: "persistence",
+          mode,
+          startedAt: p.ok ? p.data.startedAt : undefined,
+        });
+        // completeWorkflowRun writes real duration_ms + jobs_found and emits the
+        // single terminal "completed" event (no duplicate final event).
+        await completeWorkflowRun({
+          runKey: runId,
+          analysis: analysisRecord,
+          atsScore: clamp100(outputs.ats.score),
+          coverLetter: coverRecord,
+          jobMatch: jobMatchRecord,
+          interview: interviewRecord,
+          source: resolvedSource,
+          profession: analysisRecord.profession || undefined,
+          resumeLanguage: meta.resumeLanguage,
+          durationMs,
+          jobsFound: meta.jobsFound ?? outputs.jobMatches.length,
+        });
+      })();
+    } else {
+      void saveWorkflowRun({
+        // Idempotency: the run's unique id doubles as the run_key so re-saving
+        // the same run never creates a duplicate workflow_runs row.
+        runKey: runId || undefined,
+        mode: "production",
+        resumeName: usedResume ? resumeFileName ?? "Pasted resume" : "Demo run",
+        resumePreview: usedResume ? resumeText.slice(0, 300) : "",
+        analysis: analysisRecord,
+        atsScore: clamp100(outputs.ats.score),
+        coverLetter: coverRecord,
+        jobMatch: jobMatchRecord,
+        interview: interviewRecord,
+        source: resolvedSource,
+        completedAt,
+      });
+    }
   };
 
   // Reusable pipeline engine drives all step statuses and progress.
@@ -641,6 +768,7 @@ export default function WorkflowCanvas() {
       let analysis: ResumeAnalysis | null = null;
       let cover: CoverLetterResult | null = null;
 
+      let meta: { fatalStage?: WorkflowStage; resumeLanguage?: string; jobsFound?: number } = {};
       const pending = aiPromiseRef.current;
       if (pending) {
         const r = await pending;
@@ -648,12 +776,13 @@ export default function WorkflowCanvas() {
         source = r.source;
         analysis = r.analysis;
         cover = r.cover;
+        meta = { fatalStage: r.fatalStage, resumeLanguage: r.resumeLanguage, jobsFound: r.jobsFound };
         setAiResults(r.outputs);
         setAiSource(r.source);
       }
 
       setShowResults(true);
-      persistRun(outputs, source, analysis, cover);
+      persistRun(outputs, source, analysis, cover, meta);
       requestAnimationFrame(() => {
         window.setTimeout(() => {
           dashboardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -692,7 +821,34 @@ export default function WorkflowCanvas() {
     // STEP 1 — the unique runId for this upload.
     devLog(`[CareerAI] STEP 1 runId: ${runId}`);
 
-    aiPromiseRef.current = resume || job ? runRealAI(resume, job, runId) : null;
+    // Real run start time (for a real, measured duration) and a fresh DB id.
+    runStartedAtRef.current = Date.now();
+    dbRunIdRef.current = null;
+
+    if (resume || job) {
+      const usedResume = resume.length > 0 || !!resumeFileName;
+      aiPromiseRef.current = (async () => {
+        // Create the run row up front (status running) so it has a real start
+        // time and a DB id for the stage timeline. Best-effort: without a
+        // session this no-ops and the tracker records nothing (unchanged UX).
+        const created = await createWorkflowRun({
+          runKey: runId,
+          mode: "production",
+          status: "running",
+          currentStep: "queued",
+          resumeName: usedResume ? resumeFileName ?? "Pasted resume" : "Demo run",
+          resumePreview: usedResume ? resume.slice(0, 300) : "",
+        });
+        const dbId = created.ok ? created.data.id : null;
+        dbRunIdRef.current = dbId;
+        const tracker = dbId
+          ? new StageTracker(makeStageRecorder(dbId, "production"))
+          : new StageTracker(null);
+        return runRealAI(resume, job, runId, tracker);
+      })();
+    } else {
+      aiPromiseRef.current = null;
+    }
     runPipeline();
   };
 

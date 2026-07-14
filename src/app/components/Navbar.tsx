@@ -4,9 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { checkAdminAccess } from "@/lib/simulation/adminAccess";
 import {
   FileText, Mail, Network, Languages, Mic,
-  Search, TrendingUp, ChevronDown, Menu, X,
+  Search, TrendingUp, ChevronDown, Menu, X, ShieldCheck, Activity,
 } from "lucide-react";
 
 interface Tool {
@@ -99,6 +100,9 @@ export default function Navbar() {
   // Auth state: null = still checking, true/false = resolved. Read the current
   // Supabase session on mount and stay in sync with sign-in / sign-out events.
   const [authed, setAuthed] = useState<boolean | null>(null);
+  // Admin flag drives the (hidden-by-default) admin nav entry. Verified against
+  // the DB (app_admins under RLS) — non-admins/logged-out users never see it.
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -124,6 +128,20 @@ export default function Navbar() {
       sub.subscription.unsubscribe();
     };
   }, []);
+
+  // Resolve admin status whenever the session changes (fail closed). State is
+  // updated asynchronously so we never call setState synchronously in an effect.
+  useEffect(() => {
+    let active = true;
+    if (authed !== true) {
+      Promise.resolve().then(() => { if (active) setIsAdmin(false); });
+      return () => { active = false; };
+    }
+    checkAdminAccess()
+      .then((a) => { if (active) setIsAdmin(a.isAdmin); })
+      .catch(() => { if (active) setIsAdmin(false); });
+    return () => { active = false; };
+  }, [authed]);
 
   const handleLogout = async () => {
     closeAll();
@@ -257,6 +275,26 @@ export default function Navbar() {
                 </Link>
               )
             )}
+
+            {/* Admin-only entries (hidden unless the DB confirms admin) */}
+            {isAdmin && (
+              <>
+                <Link
+                  href="/admin/simulation"
+                  onClick={closeAll}
+                  className={linkCls + " inline-flex items-center gap-1.5"}
+                >
+                  <ShieldCheck size={14} className="text-emerald-400" /> Admin
+                </Link>
+                <Link
+                  href="/admin/monitoring"
+                  onClick={closeAll}
+                  className={linkCls + " inline-flex items-center gap-1.5"}
+                >
+                  <Activity size={14} className="text-cyan-400" /> Monitoring
+                </Link>
+              </>
+            )}
           </nav>
 
           {/* ── Desktop CTAs ── */}
@@ -360,6 +398,25 @@ export default function Navbar() {
                   {link.label}
                 </Link>
               )
+            )}
+
+            {isAdmin && (
+              <>
+                <Link
+                  href="/admin/simulation"
+                  onClick={closeAll}
+                  className={mobileLinkCls + " inline-flex items-center gap-2"}
+                >
+                  <ShieldCheck size={15} className="text-emerald-400" /> Admin
+                </Link>
+                <Link
+                  href="/admin/monitoring"
+                  onClick={closeAll}
+                  className={mobileLinkCls + " inline-flex items-center gap-2"}
+                >
+                  <Activity size={15} className="text-cyan-400" /> Monitoring
+                </Link>
+              </>
             )}
 
             <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-white/[0.06]">

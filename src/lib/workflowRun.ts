@@ -11,6 +11,7 @@
 // ============================================================================
 
 import { supabase } from "./supabase";
+import { sanitizeEventMetadata, type WorkflowStage } from "@/lib/workflow/stages";
 
 export type ResultSource = "live-ai" | "demo-fallback";
 
@@ -124,17 +125,31 @@ export interface WorkflowRunRow {
   started_at?: string | null;
   updated_at?: string | null;
   created_at?: string;
+  // ── Part B/C monitoring + simulation (present after part_bc migration) ──
+  profession?: string | null;
+  resume_language?: string | null;
+  duration_ms?: number | null;
+  jobs_found?: number | null;
+  retry_count?: number | null;
+  simulation_user_id?: string | null;
+  is_simulation?: boolean | null;
 }
 
 /** Params for a single observable event row. */
 export interface WorkflowEventInput {
   runId: string;
   mode?: WorkflowMode;
+  /** Canonical stage name; falls back to `step` for legacy callers. */
+  stage?: WorkflowStage;
   step?: string;
   status?: WorkflowStatus | string;
   progress?: number;
   message?: string;
   durationMs?: number;
+  startedAt?: string;
+  completedAt?: string;
+  errorCode?: string;
+  errorMessage?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -180,6 +195,10 @@ export async function createWorkflowRun(params: {
   resumeName?: string;
   resumePreview?: string;
   source?: ResultSource;
+  profession?: string;
+  resumeLanguage?: string;
+  /** Synthetic identity for load-test runs. Never a real auth user id. */
+  simulationUserId?: string;
 }): Promise<Result<{ id: string; runKey: string }>> {
   const uid = await getSessionUserId();
   if (!uid) return fail("no_session", "No authenticated session; run not persisted.");
@@ -199,6 +218,9 @@ export async function createWorkflowRun(params: {
           resume_name: params.resumeName ?? null,
           resume_preview: params.resumePreview ?? null,
           source: params.source ?? "demo-fallback",
+          profession: params.profession ?? null,
+          resume_language: params.resumeLanguage ?? null,
+          simulation_user_id: params.simulationUserId ?? null,
           started_at: new Date().toISOString(),
         },
         { onConflict: "run_key", ignoreDuplicates: true }
@@ -281,12 +303,16 @@ export async function recordWorkflowEvent(
         run_id: event.runId,
         user_id: uid,
         mode: event.mode ?? "production",
-        step: event.step ?? null,
+        step: event.stage ?? event.step ?? null,
         status: event.status ?? null,
         progress: clampProgress(event.progress) ?? null,
         message: event.message ?? null,
         duration_ms: event.durationMs ?? null,
-        metadata: event.metadata ?? {},
+        started_at: event.startedAt ?? null,
+        completed_at: event.completedAt ?? null,
+        error_code: event.errorCode ?? null,
+        error_message: event.errorMessage ?? null,
+        metadata: sanitizeEventMetadata(event.metadata),
       })
       .select("id")
       .single();
@@ -312,6 +338,10 @@ export async function completeWorkflowRun(params: {
   jobMatch?: Record<string, unknown> | null;
   interview?: Record<string, unknown> | null;
   source?: ResultSource;
+  profession?: string;
+  resumeLanguage?: string;
+  durationMs?: number;
+  jobsFound?: number;
 }): Promise<Result<{ id: string }>> {
   const uid = await getSessionUserId();
   if (!uid) return fail("no_session", "No authenticated session; run not completed.");
@@ -328,6 +358,10 @@ export async function completeWorkflowRun(params: {
   if (params.jobMatch !== undefined) patch.job_match = params.jobMatch ?? {};
   if (params.interview !== undefined) patch.interview = params.interview ?? {};
   if (params.source !== undefined) patch.source = params.source;
+  if (params.profession !== undefined) patch.profession = params.profession;
+  if (params.resumeLanguage !== undefined) patch.resume_language = params.resumeLanguage;
+  if (params.durationMs !== undefined) patch.duration_ms = Math.max(0, Math.round(params.durationMs));
+  if (params.jobsFound !== undefined) patch.jobs_found = Math.max(0, Math.round(params.jobsFound));
 
   try {
     const { data, error } = await supabase
@@ -368,20 +402,24 @@ export async function failWorkflowRun(params: {
   errorCode: string;
   errorMessage: string;
   currentStep?: string;
+  /** Real measured run duration (start→failure), persisted when provided. */
+  durationMs?: number;
 }): Promise<Result<{ id: string }>> {
   const uid = await getSessionUserId();
   if (!uid) return fail("no_session", "No authenticated session; run not marked failed.");
 
   try {
+    const patch: Record<string, unknown> = {
+      status: "failed",
+      current_step: params.currentStep ?? "failed",
+      error_code: params.errorCode,
+      error_message: params.errorMessage,
+      completed_at: new Date().toISOString(),
+    };
+    if (params.durationMs !== undefined) patch.duration_ms = Math.max(0, Math.round(params.durationMs));
     const { data, error } = await supabase
       .from("workflow_runs")
-      .update({
-        status: "failed",
-        current_step: params.currentStep ?? "failed",
-        error_code: params.errorCode,
-        error_message: params.errorMessage,
-        completed_at: new Date().toISOString(),
-      })
+      .update(patch)
       .eq("run_key", params.runKey)
       .eq("user_id", uid)
       .select("id, mode")
@@ -407,6 +445,135 @@ export async function failWorkflowRun(params: {
     console.warn("[workflowRun] failWorkflowRun error:", err.code, err.message);
     return { ok: false, error: err };
   }
+}
+
+/** Mark a run cancelled (e.g. an aborted simulation); logs a cancellation event. */
+export async function cancelWorkflowRun(params: {
+  runKey: string;
+  reason?: string;
+  currentStep?: string;
+}): Promise<Result<{ id: string }>> {
+  const uid = await getSessionUserId();
+  if (!uid) return fail("no_session", "No authenticated session; run not cancelled.");
+
+  try {
+    const { data, error } = await supabase
+      .from("workflow_runs")
+      .update({
+        status: "cancelled",
+        current_step: params.currentStep ?? "cancelled",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("run_key", params.runKey)
+      .eq("user_id", uid)
+      .select("id, mode")
+      .maybeSingle();
+    if (error) {
+      const e = toSafeError(error, "cancel_failed");
+      console.warn("[workflowRun] cancelWorkflowRun failed:", e.code, e.message);
+      return { ok: false, error: e };
+    }
+    if (!data?.id) return fail("not_found", "Run to cancel was not found.");
+
+    await recordWorkflowEvent({
+      runId: data.id as string,
+      mode: (data.mode as WorkflowMode) ?? "production",
+      step: params.currentStep ?? "cancelled",
+      status: "cancelled",
+      message: params.reason ?? "Workflow run cancelled.",
+    });
+    return { ok: true, data: { id: data.id as string } };
+  } catch (e) {
+    const err = toSafeError(e, "unexpected");
+    console.warn("[workflowRun] cancelWorkflowRun error:", err.code, err.message);
+    return { ok: false, error: err };
+  }
+}
+
+// ── Stage-event helpers (thin wrappers over recordWorkflowEvent) ──────────────
+// A stage is observed as a pair of append-only events: one "running" when it
+// starts and one terminal ("completed" | "failed") when it ends. Nothing here
+// mutates a prior row — the timeline stays append-only.
+
+/** Log the start of a stage. Returns the started_at timestamp for duration math. */
+export async function startStageEvent(params: {
+  runId: string;
+  stage: WorkflowStage;
+  mode?: WorkflowMode;
+  progress?: number;
+  message?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<Result<{ id: string; startedAt: string }>> {
+  const startedAt = new Date().toISOString();
+  const res = await recordWorkflowEvent({
+    runId: params.runId,
+    mode: params.mode,
+    stage: params.stage,
+    status: "running",
+    progress: params.progress,
+    message: params.message,
+    startedAt,
+    metadata: params.metadata,
+  });
+  if (!res.ok) return res;
+  return { ok: true, data: { id: res.data.id, startedAt } };
+}
+
+/** Log the successful end of a stage, deriving duration from `startedAt`. */
+export async function completeStageEvent(params: {
+  runId: string;
+  stage: WorkflowStage;
+  mode?: WorkflowMode;
+  startedAt?: string;
+  progress?: number;
+  message?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<Result<{ id: string }>> {
+  const completedAt = new Date().toISOString();
+  const durationMs = params.startedAt
+    ? Math.max(0, Date.parse(completedAt) - Date.parse(params.startedAt))
+    : undefined;
+  return recordWorkflowEvent({
+    runId: params.runId,
+    mode: params.mode,
+    stage: params.stage,
+    status: "completed",
+    progress: params.progress,
+    message: params.message,
+    startedAt: params.startedAt,
+    completedAt,
+    durationMs,
+    metadata: params.metadata,
+  });
+}
+
+/** Log the failure of a stage with a safe error code/message. */
+export async function failStageEvent(params: {
+  runId: string;
+  stage: WorkflowStage;
+  mode?: WorkflowMode;
+  startedAt?: string;
+  errorCode: string;
+  errorMessage: string;
+  metadata?: Record<string, unknown>;
+}): Promise<Result<{ id: string }>> {
+  const completedAt = new Date().toISOString();
+  const durationMs = params.startedAt
+    ? Math.max(0, Date.parse(completedAt) - Date.parse(params.startedAt))
+    : undefined;
+  return recordWorkflowEvent({
+    runId: params.runId,
+    mode: params.mode,
+    stage: params.stage,
+    status: "failed",
+    message: params.errorMessage,
+    startedAt: params.startedAt,
+    completedAt,
+    durationMs,
+    errorCode: params.errorCode,
+    errorMessage: params.errorMessage,
+    metadata: params.metadata,
+  });
 }
 
 // ── Legacy one-shot save (kept so the current pipeline is unchanged) ──────────
@@ -519,4 +686,110 @@ export async function readRecentWorkflowRuns(limit = 10): Promise<WorkflowRunRow
 export async function readLatestWorkflowRun(): Promise<WorkflowRunRow | null> {
   const rows = await readRecentWorkflowRuns(1);
   return rows[0] ?? null;
+}
+
+// ── Admin-scoped monitoring reads (RLS-gated) ────────────────────────────────
+// These are for the admin Monitoring Dashboard ONLY. Unlike readRecentWorkflowRuns
+// they are NOT user-scoped and do NOT hide stress runs — an admin needs to see
+// every run across all users, including simulations. Row visibility is enforced
+// by RLS: the admin SELECT-all policies (using is_admin(), backed by app_admins)
+// return all rows for admins; for a non-admin these queries return only their
+// own rows (fail-safe), and the page is additionally gated by checkAdminAccess.
+// They are READ-ONLY and never trigger any generation/provider/email/apply path.
+
+/** A single observable workflow_event row (safe, non-PII projection). */
+export interface WorkflowEventRow {
+  id: string;
+  run_id: string;
+  mode: WorkflowMode | null;
+  step: string | null;
+  status: string | null;
+  progress: number | null;
+  message: string | null;
+  duration_ms: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  is_simulation: boolean | null;
+  created_at: string;
+}
+
+/** Optional server-side narrowing for the admin runs query. */
+export interface AdminRunQuery {
+  limit?: number;
+  status?: WorkflowStatus;
+  /** true = only simulations, false = only production; omit for all. */
+  simulation?: boolean;
+  profession?: string;
+  resumeLanguage?: string;
+  fromIso?: string;
+  toIso?: string;
+}
+
+/** Read the latest runs across ALL users for admin monitoring (newest first).
+ *  Capped (default 500) so the dashboard stays bounded; stats are computed over
+ *  the loaded set. Returns [] on any error (never throws). */
+/** Error-aware variant: returns { ok, rows } so callers (the monitoring
+ *  dashboard) can distinguish a real read error from an empty result and keep
+ *  the last known rows on failure. READ-ONLY; never deletes anything. */
+export async function readAllWorkflowRunsAdminResult(
+  q: AdminRunQuery = {}
+): Promise<{ ok: boolean; rows: WorkflowRunRow[] }> {
+  try {
+    let query = supabase
+      .from("workflow_runs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(1000, Math.max(1, q.limit ?? 500)));
+
+    if (q.status) query = query.eq("status", q.status);
+    if (q.simulation !== undefined) query = query.eq("is_simulation", q.simulation);
+    if (q.profession) query = query.eq("profession", q.profession);
+    if (q.resumeLanguage) query = query.eq("resume_language", q.resumeLanguage);
+    if (q.fromIso) query = query.gte("created_at", q.fromIso);
+    if (q.toIso) query = query.lte("created_at", q.toIso);
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn("[workflowRun] readAllWorkflowRunsAdmin failed:", error.code ?? "", error.message);
+      return { ok: false, rows: [] };
+    }
+    return { ok: true, rows: (data ?? []) as WorkflowRunRow[] };
+  } catch {
+    return { ok: false, rows: [] };
+  }
+}
+
+/** Back-compatible reader: latest runs across all users, [] on error. */
+export async function readAllWorkflowRunsAdmin(q: AdminRunQuery = {}): Promise<WorkflowRunRow[]> {
+  return (await readAllWorkflowRunsAdminResult(q)).rows;
+}
+
+/** Read the chronological event timeline for one run (admin monitoring).
+ *  Selects only safe telemetry columns — no résumé/cover-letter/interview text
+ *  and no metadata blob are returned. Returns [] on any error. */
+export async function readWorkflowEventsForRun(
+  runId: string,
+  limit = 500
+): Promise<WorkflowEventRow[]> {
+  if (!runId) return [];
+  try {
+    const { data, error } = await supabase
+      .from("workflow_events")
+      .select(
+        "id, run_id, mode, step, status, progress, message, duration_ms, started_at, completed_at, error_code, error_message, is_simulation, created_at"
+      )
+      .eq("run_id", runId)
+      .order("created_at", { ascending: true })
+      .limit(Math.min(2000, Math.max(1, limit)));
+
+    if (error) {
+      console.warn("[workflowRun] readWorkflowEventsForRun failed:", error.code ?? "", error.message);
+      return [];
+    }
+    return (data ?? []) as WorkflowEventRow[];
+  } catch {
+    return [];
+  }
 }
