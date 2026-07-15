@@ -12,6 +12,7 @@
 
 import { useRef, useState } from "react";
 import { FileText, Upload, X } from "lucide-react";
+import { saveResumeFile, clearResumeFile } from "@/lib/application/resumeFileStore";
 
 // ── Minimal shapes for the dynamically-imported parsers (avoids depending on
 //    the packages' own type exports; casts stay valid across versions). ──────
@@ -103,21 +104,31 @@ export default function ResumeInputPanel({
       file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     const isLegacyDoc = /\.doc$/i.test(file.name) || file.type === "application/msword";
 
-    // Plain-text files: read directly into the textarea.
+    // Plain-text files: read directly into the textarea. No original PDF exists,
+    // so drop any previously stored original file.
     if (isText) {
       try {
         const text = await file.text();
         onChange(text.slice(0, MAX_CHARS));
         onFileNameChange(file.name);
+        clearResumeFile();
       } catch {
         setError("Could not read that file. Try pasting the text instead.");
       }
       return;
     }
 
-    // PDF / DOCX: extract text client-side and feed it into the workflow.
+    // PDF / DOCX: extract text client-side and feed it into the workflow. Also
+    // persist the ORIGINAL bytes so the real file can be bundled into the
+    // application package later (survives navigation / reload). Best-effort.
     if (isPdf || isDocx) {
       onFileNameChange(file.name);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        saveResumeFile({ name: file.name, type: file.type || (isPdf ? "application/pdf" : ""), bytes });
+      } catch {
+        clearResumeFile();
+      }
       setNotice("Extracting text from your file…");
       try {
         const text = isPdf ? await extractPdfText(file) : await extractDocxText(file);
@@ -146,6 +157,7 @@ export default function ResumeInputPanel({
   const clear = () => {
     onChange("");
     onFileNameChange(null);
+    clearResumeFile();
     setError(null);
     setNotice(null);
     if (fileRef.current) fileRef.current.value = "";

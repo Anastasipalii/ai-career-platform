@@ -41,6 +41,8 @@ function mapRunRowToResults(row: WorkflowRunRow): WorkflowResults {
     missingSkills: row.analysis?.missingSkills,
     strengths: row.analysis?.strengths,
     recommendations: row.analysis?.recommendations,
+    profession: row.profession ?? row.analysis?.profession ?? undefined,
+    resumeLanguage: row.resume_language ?? undefined,
   };
 }
 import DashboardSidebar from "@/app/components/dashboard/DashboardSidebar";
@@ -54,6 +56,7 @@ import QuickActions from "@/app/components/dashboard/QuickActions";
 import SavedResumes from "@/app/components/dashboard/SavedResumes";
 import SavedCoverLetters from "@/app/components/dashboard/SavedCoverLetters";
 import JobMatchesWidget from "@/app/components/dashboard/JobMatchesWidget";
+import PreparedApplications from "@/app/components/dashboard/PreparedApplications";
 import RoadmapWidget from "@/app/components/dashboard/RoadmapWidget";
 import InterviewWidget from "@/app/components/dashboard/InterviewWidget";
 
@@ -604,12 +607,16 @@ export default function DashboardClient() {
             <InterviewWidget sessions={interviews} questions={interviewQuestions} formatRelative={formatRelative} />
           </div>
 
-          <div className="mb-8">
+          <div className="mb-5">
             <SavedCoverLetters
               coverLetters={coverLetterRows}
               formatRelative={formatRelative}
               onDelete={handleDeleteCoverLetter}
             />
+          </div>
+
+          <div className="mb-8">
+            <PreparedApplications />
           </div>
 
           <p className="text-xs text-slate-700 text-center pb-2">CareerAI · Your data is private and secured</p>

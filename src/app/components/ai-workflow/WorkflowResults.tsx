@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { MOCK_OUTPUTS, type WorkflowOutputs } from "./mockOutputs";
+import { useRouter } from "next/navigation";
+import { MOCK_OUTPUTS, type WorkflowOutputs, type JobMatch } from "./mockOutputs";
+import { readWorkflowResults } from "@/lib/workflowResults";
+import { saveApplicationDraft } from "@/lib/application/applicationDraft";
+import type { ApplicationDraft } from "@/lib/application/types";
 
 // Copy plain text to the clipboard (same pattern the cover-letter page uses).
 function copyText(text: string): Promise<void> {
@@ -88,6 +92,39 @@ function AtsGauge({ score }: { score: number }) {
 
 export default function WorkflowResults({ show, results, source }: WorkflowResultsProps) {
   const [copied, setCopied] = useState(false);
+  const router = useRouter();
+
+  // Snapshot the selected REAL vacancy + run context into a client-only draft,
+  // then open the (dry-run) Application Preview. Nothing is ever submitted.
+  const prepareApplication = (m: JobMatch) => {
+    const persisted = readWorkflowResults();
+    const draft: ApplicationDraft = {
+      createdAt: new Date().toISOString(),
+      workflowRunId: persisted?.runId,
+      job: {
+        externalId: m.externalId,
+        title: m.title,
+        company: m.company,
+        location: m.location ?? null,
+        provider: m.provider,
+        jobTypes: m.jobTypes,
+        employmentType: m.jobTypes?.[0],
+        sourceUrl: m.sourceUrl,
+        matchScore: m.matchScore,
+      },
+      atsScore: (results ?? MOCK_OUTPUTS).ats.score,
+      profession: persisted?.profession,
+      resumeLanguage: persisted?.resumeLanguage,
+      resumeName: persisted?.resumeName,
+      resumeAnalyzed: Boolean(persisted?.detectedSkills?.length || persisted?.profession),
+      candidateProfilePresent: Boolean(persisted?.profession),
+      coverLetterPresent: Boolean(persisted?.coverLetterText?.trim()),
+      coverLetterPreview: persisted?.coverLetterText?.slice(0, 600),
+    };
+    saveApplicationDraft(draft);
+    router.push("/apply/preview");
+  };
+
   if (!show) return null;
   const o = results ?? MOCK_OUTPUTS;
 
@@ -262,18 +299,31 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
                 {/* Strengths / missing / learn-next are stored on the run but
                     intentionally hidden on the compact card (kept for a future
                     detailed vacancy page). */}
-                {/* Opens the REAL provider listing in a new tab — never submits. */}
-                {m.sourceUrl && (
-                  <a
-                    href={m.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-auto inline-flex items-center gap-1 text-[11.5px] font-medium hover:underline"
-                    style={{ color: "#7dd3fc" }}
-                  >
-                    View &amp; apply ↗
-                  </a>
-                )}
+                {/* Prepare Application (dry run) + the REAL provider listing.
+                    Neither ever submits an application. */}
+                <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1">
+                  {!m.synthetic && (
+                    <button
+                      type="button"
+                      onClick={() => prepareApplication(m)}
+                      className="inline-flex items-center gap-1 text-[11.5px] font-semibold px-2.5 py-1 rounded-md text-white transition hover:opacity-90"
+                      style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
+                    >
+                      Prepare Application
+                    </button>
+                  )}
+                  {m.sourceUrl && (
+                    <a
+                      href={m.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11.5px] font-medium hover:underline"
+                      style={{ color: "#7dd3fc" }}
+                    >
+                      View &amp; apply ↗
+                    </a>
+                  )}
+                </div>
               </div>
             ))}
           </div>

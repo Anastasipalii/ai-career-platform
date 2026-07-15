@@ -645,6 +645,8 @@ export default function WorkflowCanvas() {
       missingSkills: analysis?.missingSkills ?? outputs.missingSkills,
       strengths: analysis?.strengths,
       recommendations: analysis?.recommendations,
+      profession: analysis?.profession || undefined,
+      resumeLanguage: meta.resumeLanguage,
     });
 
     // Best-effort DB write — no-ops without a session, never blocks the UI.

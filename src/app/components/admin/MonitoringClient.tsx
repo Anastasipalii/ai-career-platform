@@ -21,6 +21,7 @@ import {
 } from "@/lib/monitoring/stats";
 import { PollingController } from "@/lib/monitoring/polling";
 import { runRefresh } from "@/lib/monitoring/refresh";
+import ApplicationMonitoring from "@/app/components/admin/ApplicationMonitoring";
 
 // Dev-only diagnostics (no sensitive data — lifecycle events only).
 const diag = (event: string) => {
@@ -342,6 +343,9 @@ export default function MonitoringClient() {
           </div>
         </div>
       )}
+
+      {/* Dry-run application preparations (mode = dry_run) */}
+      <ApplicationMonitoring />
     </Shell>
   );
 }

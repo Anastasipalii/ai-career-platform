@@ -65,6 +65,9 @@ export interface WorkflowResults {
   missingSkills?: string[];
   strengths?: string[];
   recommendations?: string[];
+  // ── Candidate essentials (for the application preparation flow) ──
+  profession?: string;
+  resumeLanguage?: string;
 }
 
 /** True only in a browser with a usable localStorage. */
@@ -118,6 +121,8 @@ export function readWorkflowResults(): WorkflowResults | null {
       missingSkills: Array.isArray(parsed.missingSkills) ? parsed.missingSkills : undefined,
       strengths: Array.isArray(parsed.strengths) ? parsed.strengths : undefined,
       recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : undefined,
+      profession: typeof parsed.profession === "string" ? parsed.profession : undefined,
+      resumeLanguage: typeof parsed.resumeLanguage === "string" ? parsed.resumeLanguage : undefined,
     };
   } catch {
     return null;
