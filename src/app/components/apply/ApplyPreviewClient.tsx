@@ -341,6 +341,7 @@ export default function ApplyPreviewClient() {
             <SectionTitle>Candidate package</SectionTitle>
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
               <Row label="Selected resume" value={draft.resumeName ?? "—"} />
+              <Row label="Target profession" value={draft.targetProfession ?? "—"} />
               <Row label="Candidate profession" value={draft.profession ?? "—"} />
               <Row label="Resume language" value={draft.resumeLanguage ?? "—"} />
               <Row label="ATS score" value={`${Math.round(draft.atsScore)}`} />

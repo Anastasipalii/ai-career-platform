@@ -114,6 +114,7 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
       },
       atsScore: (results ?? MOCK_OUTPUTS).ats.score,
       profession: persisted?.profession,
+      targetProfession: persisted?.targetProfession,
       resumeLanguage: persisted?.resumeLanguage,
       resumeName: persisted?.resumeName,
       resumeAnalyzed: Boolean(persisted?.detectedSkills?.length || persisted?.profession),
@@ -284,13 +285,14 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
                     {m.matchScore}%
                   </span>
                 </div>
-                {(m.location || m.remote || (m.jobTypes && m.jobTypes.length) || m.publishedAt) && (
+                {(m.location || m.remote || (m.jobTypes && m.jobTypes.length) || m.publishedAt || m.provider) && (
                   <p className="text-slate-500 text-[11px] leading-snug">
                     {[
                       m.location || null,
                       m.remote ? "Remote" : null,
                       m.jobTypes && m.jobTypes.length ? m.jobTypes.join(" / ") : null,
                       m.publishedAt ? new Date(m.publishedAt).toLocaleDateString() : null,
+                      m.provider ? `via ${m.provider.charAt(0).toUpperCase()}${m.provider.slice(1)}` : null,
                     ]
                       .filter(Boolean)
                       .join(" · ")}
@@ -324,6 +326,11 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
                     </a>
                   )}
                 </div>
+                {m.sourceUrl && (
+                  <p className="text-[10px] text-slate-600 leading-snug">
+                    Availability and application options are controlled by the external provider.
+                  </p>
+                )}
               </div>
             ))}
           </div>

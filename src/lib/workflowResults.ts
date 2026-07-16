@@ -67,7 +67,12 @@ export interface WorkflowResults {
   recommendations?: string[];
   // ── Candidate essentials (for the application preparation flow) ──
   profession?: string;
+  /** User-entered Target Profession this run searched for (source of truth for
+   *  the job search). Distinct from the résumé-derived `profession`. */
+  targetProfession?: string;
   resumeLanguage?: string;
+  // ── Search preferences used for this run (location-aware search) ──
+  searchLocation?: { city?: string; country?: string; radiusKm?: number; remoteWorldwide?: boolean };
 }
 
 /** True only in a browser with a usable localStorage. */
@@ -122,7 +127,12 @@ export function readWorkflowResults(): WorkflowResults | null {
       strengths: Array.isArray(parsed.strengths) ? parsed.strengths : undefined,
       recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : undefined,
       profession: typeof parsed.profession === "string" ? parsed.profession : undefined,
+      targetProfession: typeof parsed.targetProfession === "string" ? parsed.targetProfession : undefined,
       resumeLanguage: typeof parsed.resumeLanguage === "string" ? parsed.resumeLanguage : undefined,
+      searchLocation:
+        parsed.searchLocation && typeof parsed.searchLocation === "object"
+          ? (parsed.searchLocation as WorkflowResults["searchLocation"])
+          : undefined,
     };
   } catch {
     return null;

@@ -8,7 +8,7 @@
 // be confused with real listings.
 // ============================================================================
 
-export type JobProvider = "arbeitnow";
+export type JobProvider = "arbeitnow" | "jooble";
 
 export interface NormalizedJob {
   /** Stable id from the provider (e.g. Arbeitnow slug). */

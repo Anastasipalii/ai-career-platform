@@ -49,6 +49,8 @@ export interface ApplicationDraft {
   job: ApplicationDraftJob;
   atsScore: number;
   profession?: string;
+  /** User-entered Target Profession this application's search ran against. */
+  targetProfession?: string;
   resumeLanguage?: string;
   resumeName?: string;
   resumeAnalyzed: boolean;

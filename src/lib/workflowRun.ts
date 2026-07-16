@@ -12,6 +12,7 @@
 
 import { supabase } from "./supabase";
 import { sanitizeEventMetadata, type WorkflowStage } from "@/lib/workflow/stages";
+import { sanitizeForDb } from "@/lib/dbSafe";
 
 export type ResultSource = "live-ai" | "demo-fallback";
 
@@ -208,7 +209,7 @@ export async function createWorkflowRun(params: {
     const { error: upsertError } = await supabase
       .from("workflow_runs")
       .upsert(
-        {
+        sanitizeForDb({
           user_id: uid,
           run_key: params.runKey,
           mode: params.mode ?? "production",
@@ -222,7 +223,7 @@ export async function createWorkflowRun(params: {
           resume_language: params.resumeLanguage ?? null,
           simulation_user_id: params.simulationUserId ?? null,
           started_at: new Date().toISOString(),
-        },
+        }),
         { onConflict: "run_key", ignoreDuplicates: true }
       );
     if (upsertError) {
@@ -273,7 +274,7 @@ export async function updateWorkflowRunStatus(params: {
   try {
     const { error } = await supabase
       .from("workflow_runs")
-      .update(patch)
+      .update(sanitizeForDb(patch))
       .eq("run_key", params.runKey)
       .eq("user_id", uid);
     if (error) {
@@ -299,7 +300,7 @@ export async function recordWorkflowEvent(
   try {
     const { data, error } = await supabase
       .from("workflow_events")
-      .insert({
+      .insert(sanitizeForDb({
         run_id: event.runId,
         user_id: uid,
         mode: event.mode ?? "production",
@@ -313,7 +314,7 @@ export async function recordWorkflowEvent(
         error_code: event.errorCode ?? null,
         error_message: event.errorMessage ?? null,
         metadata: sanitizeEventMetadata(event.metadata),
-      })
+      }))
       .select("id")
       .single();
     if (error) {
@@ -366,7 +367,7 @@ export async function completeWorkflowRun(params: {
   try {
     const { data, error } = await supabase
       .from("workflow_runs")
-      .update(patch)
+      .update(sanitizeForDb(patch))
       .eq("run_key", params.runKey)
       .eq("user_id", uid)
       .select("id, mode")
@@ -419,7 +420,7 @@ export async function failWorkflowRun(params: {
     if (params.durationMs !== undefined) patch.duration_ms = Math.max(0, Math.round(params.durationMs));
     const { data, error } = await supabase
       .from("workflow_runs")
-      .update(patch)
+      .update(sanitizeForDb(patch))
       .eq("run_key", params.runKey)
       .eq("user_id", uid)
       .select("id, mode")
@@ -599,7 +600,7 @@ export async function saveWorkflowRun(input: WorkflowRunInput): Promise<{ ok: bo
     const { data, error } = await supabase
       .from("workflow_runs")
       .upsert(
-        {
+        sanitizeForDb({
           user_id: uid,
           run_key: runKey,
           mode,
@@ -616,7 +617,7 @@ export async function saveWorkflowRun(input: WorkflowRunInput): Promise<{ ok: bo
           source: input.source,
           started_at: input.completedAt,
           completed_at: input.completedAt,
-        },
+        }),
         { onConflict: "run_key" }
       )
       .select("id")

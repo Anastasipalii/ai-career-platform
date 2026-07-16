@@ -63,7 +63,28 @@ export function supabaseAdminDeps() {
   };
 }
 
+// Per-user cache of the app_admins result. The Navbar re-checks admin on every
+// auth-state change; without this the app_admins table is queried repeatedly
+// (and each query is a 404 when that table isn't present), spamming the network
+// log. Cached per userId for the session; a read error caches "not admin" so we
+// never re-request a missing/failing table.
+const _adminCache = new Map<string, boolean>();
+
+/** Clear the cached admin decision (e.g. on explicit sign-out). */
+export function invalidateAdminCache(): void {
+  _adminCache.clear();
+}
+
 /** Resolve the current session's admin access against the real database. */
 export function checkAdminAccess(): Promise<AdminAccess> {
-  return resolveAdminAccess(supabaseAdminDeps());
+  const deps = supabaseAdminDeps();
+  return resolveAdminAccess({
+    getUserId: deps.getUserId,
+    isUserAdmin: async (userId: string): Promise<boolean> => {
+      if (_adminCache.has(userId)) return _adminCache.get(userId)!;
+      const isAdmin = await deps.isUserAdmin(userId);
+      _adminCache.set(userId, isAdmin);
+      return isAdmin;
+    },
+  });
 }
