@@ -1,5 +1,11 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest, NextResponse } from "next/server";
+
+// Streaming server handler — always dynamic, Node runtime (prevents static
+// route-collection/caching quirks that can surface as a 405 on POST).
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 interface GenerateRequestBody {
   jobTitle: string;
@@ -16,7 +22,8 @@ interface GenerateResult {
   atsKeywords: string[];
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
       { error: "OpenAI is not configured. Please add OPENAI_API_KEY to your environment variables." },
@@ -43,8 +50,8 @@ export async function POST(req: NextRequest) {
 Rules:
 - Never use first-person pronouns (I, my, me)
 - Lead every achievement bullet with a strong action verb
-- Include quantifiable outcomes wherever possible
 - Use keywords that pass ATS scanners for ${industry || "the technology"} industry
+FACTUAL INTEGRITY (critical): this is a draft built ONLY from the details the user supplied (job title, industry, skills). Do NOT invent specific employers, job titles, employment dates, education, degrees, certifications, real metrics/numbers, or achievements and present them as facts. Write generic, editable phrasing the user will fill in with their real details; never fabricate credentials.
 - Return ONLY the JSON object, no markdown, no extra text`;
 
   const userPrompt = `Generate professional resume content for:
@@ -83,4 +90,5 @@ Return a JSON object with EXACTLY these keys:
     const message = err instanceof Error ? err.message : "AI generation failed.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+  });
 }

@@ -10,7 +10,8 @@ export interface AIQuestion {
 export interface SessionAnswer {
   question: AIQuestion;
   answer:   string;
-  feedback: FeedbackData;
+  /** AI feedback when the user requested it; null when they skipped scoring. */
+  feedback: FeedbackData | null;
 }
 
 export interface SimpleSetupData {

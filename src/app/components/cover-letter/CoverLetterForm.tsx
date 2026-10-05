@@ -111,6 +111,49 @@ export default function CoverLetterForm({
         </div>
       </div>
 
+      {/* Your details — real, user-reviewed identity (prefilled from résumé) */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">
+          Your Details
+        </label>
+        <p className="text-xs text-slate-600 mb-3">
+          Used in the letter heading and to ground the writing in your real information. Upload a
+          résumé above to prefill these — review and correct anything. Blank fields are simply omitted.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div>
+            <label htmlFor="cl-fullName" className="sr-only">Full name</label>
+            <input id="cl-fullName" type="text" className={inputCls} placeholder="Full name"
+              value={formData.fullName} onChange={(e) => set("fullName", e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="cl-email" className="sr-only">Email</label>
+            <input id="cl-email" type="email" className={inputCls} placeholder="Email"
+              value={formData.email} onChange={(e) => set("email", e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="cl-phone" className="sr-only">Phone</label>
+            <input id="cl-phone" type="tel" className={inputCls} placeholder="Phone"
+              value={formData.phone} onChange={(e) => set("phone", e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="cl-location" className="sr-only">Location</label>
+            <input id="cl-location" type="text" className={inputCls} placeholder="Location"
+              value={formData.location} onChange={(e) => set("location", e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="cl-role" className="sr-only">Target role</label>
+            <input id="cl-role" type="text" className={inputCls} placeholder="Target role"
+              value={formData.jobTitle} onChange={(e) => set("jobTitle", e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="cl-company" className="sr-only">Company</label>
+            <input id="cl-company" type="text" className={inputCls} placeholder="Company"
+              value={formData.company} onChange={(e) => set("company", e.target.value)} />
+          </div>
+        </div>
+      </div>
+
       {/* Generate button */}
       <button
         type="button"

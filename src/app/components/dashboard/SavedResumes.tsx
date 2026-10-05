@@ -7,6 +7,8 @@ import { ResumeRow } from "@/app/components/dashboard/DashboardClient";
 interface SavedResumesProps {
   resumes: ResumeRow[];
   formatRelative: (iso: string) => string;
+  onView: (id: string) => void;
+  viewLoadingId: string | null;
   onDelete: (id: string) => Promise<void>;
   onRename: (id: string, title: string) => Promise<void>;
 }
@@ -23,7 +25,7 @@ function AtsBar({ score }: { score: number }) {
   );
 }
 
-export default function SavedResumes({ resumes, formatRelative, onDelete, onRename }: SavedResumesProps) {
+export default function SavedResumes({ resumes, formatRelative, onView, viewLoadingId, onDelete, onRename }: SavedResumesProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId]           = useState<string | null>(null);
   const [renameId, setRenameId]               = useState<string | null>(null);
@@ -165,7 +167,7 @@ export default function SavedResumes({ resumes, formatRelative, onDelete, onRena
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
                 {confirmDeleteId === resume.id ? (
                   /* Two-step delete confirmation */
                   <>
@@ -195,6 +197,18 @@ export default function SavedResumes({ resumes, formatRelative, onDelete, onRena
                 ) : (
                   /* Normal actions */
                   <>
+                    {resume.id !== "wf-resume" && (
+                      <button
+                        type="button"
+                        onClick={() => onView(resume.id)}
+                        disabled={viewLoadingId === resume.id}
+                        title="Preview this résumé (read-only)"
+                        className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-90 disabled:opacity-60"
+                        style={{ background: "rgba(255,255,255,0.05)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.1)" }}
+                      >
+                        {viewLoadingId === resume.id ? "Loading…" : "View"}
+                      </button>
+                    )}
                     <Link
                       href={`/resume-builder?id=${resume.id}`}
                       title="Open in the builder to edit and download PDF"

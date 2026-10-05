@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { authedFetch } from "@/lib/auth/authedFetch";
 import { ResumeFormData, ExperienceEntry, TRANSLATION_LANGUAGES } from "@/app/components/resume-builder/types";
 
 interface TranslationPanelProps {
@@ -46,7 +47,7 @@ export default function TranslationPanel({ formData, onUpdate, onTargetLanguage 
 
     try {
       for (const item of textsToTranslate) {
-        const res = await fetch("/api/resume/improve", {
+        const res = await authedFetch("/api/resume/improve", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

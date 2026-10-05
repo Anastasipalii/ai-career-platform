@@ -116,6 +116,15 @@ export default function InterviewWidget({ sessions, formatRelative, questions }:
                     <div className="h-full rounded-full" style={{ width: `${s.score}%`, background: sc }} />
                   </div>
                 )}
+                <div className="mt-3 flex justify-end">
+                  <Link
+                    href={`/interview-coach?id=${s.id}`}
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all hover:opacity-90"
+                    style={{ background: "rgba(245,158,11,0.1)", color: "#fcd34d", border: "1px solid rgba(245,158,11,0.2)" }}
+                  >
+                    View
+                  </Link>
+                </div>
               </div>
             );
           })}

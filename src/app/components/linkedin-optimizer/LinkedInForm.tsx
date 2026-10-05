@@ -153,7 +153,7 @@ export default function LinkedInForm({
             <label className="block text-xs text-slate-500 mb-1.5">Current LinkedIn headline</label>
             <input
               className={inputCls}
-              placeholder="Senior Product Designer @ Vercel | UX · Design Systems · AI Products"
+              placeholder="e.g. Senior Product Designer | UX · Design Systems · AI Products"
               value={formData.headline}
               onChange={(e) => set("headline", e.target.value)}
             />
@@ -208,7 +208,7 @@ export default function LinkedInForm({
         <textarea
           className={textareaCls}
           rows={4}
-          placeholder={"Senior Product Designer @ Vercel (Mar 2022 – Present)\n• Led redesign of the developer dashboard, improving onboarding by 40%\n• Built design system across 12 product surfaces"}
+          placeholder={"e.g. Senior Product Designer (2022 – Present)\n• What you owned and did, in your own words\n• Include real, verifiable results where you have them"}
           value={formData.experience}
           onChange={(e) => set("experience", e.target.value)}
         />

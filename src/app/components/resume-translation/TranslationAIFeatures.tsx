@@ -18,8 +18,8 @@ const features: Feature[] = [
         <path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" />
       </svg>
     ),
-    title:       "Smart Translation",
-    description: "Keeps your resume professional and natural — not just word-for-word, but context-aware and career-ready.",
+    title:       "Faithful Translation",
+    description: "Natural, professional phrasing in the target language — true to your facts, numbers and dates, never rewritten or embellished.",
     color:  "#10b981",
     bg:     "rgba(16,185,129,0.1)",
     border: "rgba(16,185,129,0.2)",
@@ -31,8 +31,8 @@ const features: Feature[] = [
         <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
       </svg>
     ),
-    title:       "ATS-Safe Formatting",
-    description: "Preserves layout and machine-readable structure so your resume passes automated screening in any language.",
+    title:       "Structure Preserved",
+    description: "Keeps your section order, headings, bullet points and contact details. Translates the résumé text — it does not recreate the original PDF/DOCX visual layout.",
     color:  "#7c3aed",
     bg:     "rgba(124,58,237,0.1)",
     border: "rgba(124,58,237,0.2)",
@@ -62,11 +62,11 @@ export default function TranslationAIFeatures() {
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3">
-            More than a{" "}
-            <span className="gradient-text">direct translation</span>
+            A faithful,{" "}
+            <span className="gradient-text">professional translation</span>
           </h2>
           <p className="text-slate-400 text-sm max-w-lg mx-auto">
-            Three layers of intelligence that turn your resume into a job-market-ready document in any language.
+            Your résumé text, translated accurately into 25+ languages — facts, numbers and structure preserved.
           </p>
         </div>
 

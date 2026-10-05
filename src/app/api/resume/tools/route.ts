@@ -1,5 +1,11 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest, NextResponse } from "next/server";
+
+// Streaming server handler — always dynamic, Node runtime (prevents static
+// route-collection/caching quirks that can surface as a 405 on POST).
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type StreamingTool = "grammar" | "rewriter" | "cover_letter";
@@ -138,7 +144,8 @@ ${body.resumeText ?? ""}`,
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   if (!process.env.OPENAI_API_KEY) {
     return errorJson(
       "OpenAI is not configured. Add OPENAI_API_KEY to your environment variables.",
@@ -246,4 +253,5 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "AI request failed.";
     return errorJson(msg, 500);
   }
+  });
 }

@@ -9,12 +9,17 @@ export const metadata: Metadata = {
     "Rewrite your LinkedIn headline, summary, and experience with AI-generated copy. Increase recruiter visibility and profile views in minutes.",
 };
 
-export default function LinkedInOptimizerPage() {
+interface PageProps {
+  searchParams: Promise<{ id?: string }>;
+}
+
+export default async function LinkedInOptimizerPage({ searchParams }: PageProps) {
+  const { id } = await searchParams;
   return (
     <>
       <Navbar />
       <main className="pt-16">
-        <LinkedInClient />
+        <LinkedInClient initialProfileId={id} />
       </main>
       <Footer />
     </>

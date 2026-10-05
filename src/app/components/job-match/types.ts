@@ -25,6 +25,33 @@ export interface JobMatch {
   postedDate: string;
 }
 
+/**
+ * A REAL ranked job for display. Every identity field originates from the
+ * external provider result (via /api/jobs/search → /api/job-match/agent) and is
+ * never AI-generated. Optional fields are omitted by the UI when absent — never
+ * substituted with invented salary/date/location values.
+ */
+export interface RankedJob {
+  externalId: string;
+  provider: string;
+  title: string;
+  company: string;
+  location: string | null;
+  remote: boolean;
+  /** Plain-text snippet from the provider description, "" when none. */
+  description: string;
+  jobTypes: string[];
+  /** 0-100 ranking from the AI over the REAL job (identity never changes). */
+  matchScore: number;
+  whyMatch: string;
+  missingSkills: string[];
+  recommendedSkills: string[];
+  /** Provider-supplied apply/source URLs; "" when the provider gave none. */
+  applyUrl: string;
+  sourceUrl: string;
+  publishedAt: string | null;
+}
+
 export const WORK_TYPES: WorkType[] = ["Remote", "Hybrid", "On-site"];
 export const EMPLOYMENT_TYPES: EmploymentType[] = ["Full-time", "Part-time", "Internship", "Freelance"];
 export const SENIORITY_LEVELS: SeniorityLevel[] = ["Intern", "Junior", "Mid-level", "Senior", "Lead"];
@@ -34,6 +61,8 @@ export const LANGUAGES: string[] = [
   "Russian", "Polish", "Spanish", "Italian", "French", "Portuguese", "Arabic",
 ];
 
+/** @deprecated Demo-only sample data. NOT used by the live Job Match flow
+ *  (which shows only real provider listings). Retained as dead sample data. */
 export const MOCK_JOBS: JobMatch[] = [
   {
     id: 1,

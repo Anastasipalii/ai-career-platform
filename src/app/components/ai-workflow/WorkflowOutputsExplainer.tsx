@@ -23,7 +23,7 @@ export default function WorkflowOutputsExplainer() {
             Outputs flow back to your <span className="gradient-text">Dashboard</span>
           </h2>
           <p className="text-slate-400 text-sm max-w-2xl mx-auto leading-relaxed">
-            The Studio is where automations run. When a workflow finishes, its
+            The Studio is where a run executes. When a workflow finishes, its
             results are routed into your personal workspace as one of the item
             types below — so the Dashboard stays your single source of truth.
           </p>
@@ -36,7 +36,7 @@ export default function WorkflowOutputsExplainer() {
             style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(124,58,237,0.25)" }}
           >
             <div className="text-white font-semibold text-sm">Run a workflow</div>
-            <div className="text-xs text-slate-500 mt-1">AI agents + automations</div>
+            <div className="text-xs text-slate-500 mt-1">AI agents</div>
           </div>
 
           <div className="flex items-center text-slate-600">

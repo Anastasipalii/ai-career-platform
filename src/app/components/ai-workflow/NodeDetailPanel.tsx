@@ -214,7 +214,7 @@ function PanelBody({ step, onClose }: { step: FlowStep; onClose: () => void }) {
           </button>
         </div>
 
-        <p className="text-[11px] text-slate-600 text-center pt-1">Example pipeline output</p>
+        <p className="text-[11px] text-slate-600 text-center pt-1">Illustrative example — not your run&apos;s data.</p>
       </div>
     </div>
   );

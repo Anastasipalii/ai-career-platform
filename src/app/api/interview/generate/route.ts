@@ -1,7 +1,9 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest, NextResponse } from "next/server";
 import { withRetryOn429 } from "@/lib/openaiRetry";
-import { LANGUAGE_RULE_INTERVIEW } from "@/lib/promptLanguage";
+import { LANGUAGE_RULE_INTERVIEW, languageRule } from "@/lib/promptLanguage";
+import { INTERVIEW_LANGUAGES } from "@/app/components/interview-coach/types";
 
 type InterviewMode = "quick" | "hr" | "technical" | "full";
 
@@ -27,7 +29,8 @@ const MODE_CONFIG: Record<InterviewMode, { count: number; focus: string }> = {
 
 const VALID_MODES: InterviewMode[] = ["quick", "hr", "technical", "full"];
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
       { error: "OpenAI is not configured. Add OPENAI_API_KEY to environment variables." },
@@ -52,15 +55,21 @@ export async function POST(req: NextRequest) {
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+  // A provided language is authoritative ONLY when it is one we support; an
+  // unrecognised value falls back to detecting the language from context rather
+  // than being injected verbatim into the prompt.
+  const langAllowed = typeof language === "string" && (INTERVIEW_LANGUAGES as readonly string[]).includes(language);
+  const languageDirective = langAllowed ? languageRule(language) : LANGUAGE_RULE_INTERVIEW;
+  const safeJobTitle = (typeof jobTitle === "string" ? jobTitle : "").trim().slice(0, 120);
+
   const system = `You are an expert interview coach. Generate realistic, role-specific interview questions.
 Return ONLY valid JSON — no markdown, no extra text.
 
-${LANGUAGE_RULE_INTERVIEW}
-Requested language (fallback when the context language is ambiguous): ${language || "English (US)"}.`;
+${languageDirective}`;
 
   const user = `Generate exactly ${count} interview questions.
 
-Role: ${jobTitle || "the role"}
+Role: ${safeJobTitle || "the role"}
 Interview focus: ${focus}
 ${jobDescription?.trim() ? `Job Description:\n${jobDescription.substring(0, 1500)}` : "No job description provided — generate general professional interview questions."}
 
@@ -108,25 +117,28 @@ Make every question specific and tailored to the role. Vary the categories appro
     const msg = e?.message ?? "AI generation failed.";
     const is429 =
       e?.status === 429 || /\b429\b|rate limit|quota|too many requests/i.test(msg);
-    // Graceful 429 handling — the client builds local, profession-based
-    // questions when this route can't serve live ones.
+    // Graceful 429 handling — the client surfaces a truthful, retryable error
+    // (it does NOT fabricate local questions).
     if (is429) {
       // Surface the exact subtype so the cause is confirmable in the terminal:
       //   insufficient_quota  → billing/credits exhausted (persistent)
       //   rate_limit_exceeded → too many requests/tokens per minute (transient)
-      console.log(
-        "[CareerAI route:interview] OpenAI 429 →",
-        "code:", e?.code ?? "(none)",
-        "| meaning:", e?.code === "insufficient_quota"
-          ? "billing/quota exhausted — add credits"
-          : "rate limit — retry later / spacing helps",
-        "| message:", msg
-      );
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          "[CareerAI route:interview] OpenAI 429 →",
+          "code:", e?.code ?? "(none)",
+          "| meaning:", e?.code === "insufficient_quota"
+            ? "billing/quota exhausted — add credits"
+            : "rate limit — retry later / spacing helps",
+          "| message:", msg
+        );
+      }
       return NextResponse.json(
         { error: "AI generation is temporarily unavailable (rate limit). Local fallback will be used.", code: e?.code ?? "rate_limited" },
         { status: 429 }
       );
     }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: "We couldn\u2019t generate questions right now. Please try again." }, { status: 500 });
   }
+  });
 }

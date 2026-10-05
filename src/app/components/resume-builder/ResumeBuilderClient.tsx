@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatRelative } from "@/lib/formatRelative";
@@ -14,9 +14,15 @@ import Toast from "@/app/components/ui/Toast";
 import ResumeHero from "@/app/components/resume-builder/ResumeHero";
 import ResumeForm from "@/app/components/resume-builder/ResumeForm";
 import AIAssistantPanel from "@/app/components/resume-builder/AIAssistantPanel";
+import ResumeAnalysisPanel from "@/app/components/resume-builder/ResumeAnalysisPanel";
+import ResumeViewModal from "@/app/components/resume-builder/ResumeViewModal";
+import ConfirmDialog from "@/app/components/resume-builder/ConfirmDialog";
 import CustomizationPanel from "@/app/components/resume-builder/CustomizationPanel";
 import ResumePreview from "@/app/components/resume-builder/ResumePreview";
 import ExportSection from "@/app/components/resume-builder/ExportSection";
+import ResumeImportPanel from "@/app/components/resume-builder/ResumeImportPanel";
+import { isResumeEmpty, withFormDataDefaults } from "@/lib/resume/importResume";
+import { serializeResumeState } from "@/lib/resume/dirtyState";
 
 // ── Public types used by ExportSection ─────────────────────────────────────
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -55,30 +61,23 @@ function isTemplateKey(s: string | null): s is TemplateKey {
 
 // ── Initial data ─────────────────────────────────────────────────────────────
 const INITIAL_FORM_DATA: ResumeFormData = {
-  fullName: "Your Name",
-  jobTitle: "Your Job Title",
-  email: "you@email.com",
-  phone: "+1 (555) 000-0000",
-  location: "Your City",
-  website: "yourwebsite.com",
-  linkedin: "linkedin.com/in/yourname",
+  fullName: "",
+  jobTitle: "",
+  email: "",
+  phone: "",
+  location: "",
+  website: "",
+  linkedin: "",
   photoUrl: "",
-  summary:
-    "Experienced professional with a track record of delivering measurable results. Led key initiatives end to end across multiple teams. Passionate about accessibility, data-driven decisions, and building work that ships fast.",
-  skills: ["Figma", "UX Research", "Design Systems", "Prototyping", "AI/ML Products", "React", "Accessibility", "A/B Testing"],
-  experience: [
-    { id: "exp-1", company: "Vercel", role: "Senior Product Designer", startDate: "Mar 2022", endDate: "Present",
-      description: "Led design for AI-powered developer tools used by 1M+ developers.\nBuilt and maintained Vercel's design system across 12 product surfaces.\nDrove 34% increase in deployment success rate through UX improvements." },
-    { id: "exp-2", company: "Linear", role: "Product Designer", startDate: "Jun 2020", endDate: "Feb 2022",
-      description: "Designed core issue tracking and project management workflows.\nReduced onboarding time by 40% through progressive disclosure redesign.\nCollaborated with engineering on React component library." },
-  ],
-  education: [
-    { id: "edu-1", institution: "UC Berkeley", degree: "Bachelor of Arts", field: "Cognitive Science & HCI", startDate: "Sep 2016", endDate: "May 2020" },
-  ],
-  languages: [
-    { id: "lang-1", language: "English", proficiency: "Native" },
-    { id: "lang-2", language: "Mandarin", proficiency: "Fluent" },
-  ],
+  summary: "",
+  skills: [],
+  experience: [],
+  education: [],
+  languages: [],
+  projects: [],
+  certifications: [],
+  professionalLinks: [],
+  customSections: [],
 };
 
 const INITIAL_SETTINGS: CustomizationSettings = {
@@ -106,19 +105,48 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
 
   const [formData, setFormData]           = useState<ResumeFormData>(INITIAL_FORM_DATA);
   const [settings, setSettings]           = useState<CustomizationSettings>(INITIAL_SETTINGS);
+  // Read-only "View" of a saved résumé. A snapshot only — viewing never touches
+  // the builder's formData/settings/resumeId, Supabase, AI, or analysis, so any
+  // unsaved builder work stays intact while the modal is open.
+  const [viewState, setViewState] = useState<{
+    record: SavedResumeRecord;
+    formData: ResumeFormData;
+    settings: CustomizationSettings;
+  } | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateKey>("Creative");
   const [resumeId, setResumeId]           = useState<string | null>(null);
+  // Serialized snapshot of the last safe state; the résumé is dirty when the
+  // current serialization differs from it. Seeded to the empty résumé (clean).
+  const [baseline, setBaseline] = useState<string>(() =>
+    serializeResumeState(INITIAL_FORM_DATA, INITIAL_SETTINGS, "Creative")
+  );
+  // A saved résumé the user asked to edit while the builder has unsaved changes.
+  const [pendingLoad, setPendingLoad] = useState<SavedResumeRecord | null>(null);
   const [saveStatus, setSaveStatus]       = useState<SaveStatus>("idle");
   const [pdfStatus, setPdfStatus]         = useState<PdfStatus>("idle");
   const [toast, setToast]                 = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [myResumes, setMyResumes]         = useState<SavedResumeRecord[]>([]);
+  const [showImport, setShowImport]       = useState(false);
 
   // ── Utilities ──────────────────────────────────────────────────────────────
 
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = useCallback((message: string, type: "success" | "error") => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
   }, []);
+
+  // Apply an imported résumé draft to the builder (explicit user action;
+  // never auto-saved). Merge/replace is decided in ResumeImportPanel.
+  const handleImportApply = useCallback((next: ResumeFormData, mode: "import" | "merge" | "replace") => {
+    setFormData(next);
+    const msg =
+      mode === "merge" ? "Résumé merged successfully."
+      : mode === "replace" ? "Résumé replaced successfully."
+      : "Résumé imported successfully.";
+    showToast(msg, "success");
+  }, [showToast]);
 
   const fetchMyResumes = useCallback(async (uid: string): Promise<SavedResumeRecord[]> => {
     const { data } = await supabase
@@ -130,10 +158,19 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
   }, []);
 
   const loadRecord = useCallback((record: SavedResumeRecord) => {
-    if (record.content?.formData) setFormData(record.content.formData);
-    if (record.content?.settings) setSettings(record.content.settings);
-    if (isTemplateKey(record.template_name)) setSelectedTemplate(record.template_name);
+    // Backward compatibility: résumés saved before Projects/Certifications existed
+    // have no such keys — normalize through the SAME canonical helper the View
+    // surfaces use (withFormDataDefaults), so Edit and View load identically and
+    // a loaded résumé never shares the module-level INITIAL_FORM_DATA arrays.
+    const nextFormData = withFormDataDefaults(record.content?.formData);
+    const nextSettings = record.content?.settings ?? INITIAL_SETTINGS;
+    const nextTemplate = isTemplateKey(record.template_name) ? record.template_name : "Creative";
+    setFormData(nextFormData);
+    setSettings(nextSettings);
+    setSelectedTemplate(nextTemplate);
     setResumeId(record.id);
+    // A freshly-loaded résumé is the new clean baseline.
+    setBaseline(serializeResumeState(nextFormData, nextSettings, nextTemplate));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -166,6 +203,10 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
   }, []);
 
   const handleSave = async () => {
+    if (isResumeEmpty(formData)) {
+      showToast("Add some résumé information before saving.", "error");
+      return;
+    }
     setSaveStatus("saving");
 
     const { data: { session } } = await supabase.auth.getSession();
@@ -214,8 +255,10 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
     const records = await fetchMyResumes(session.user.id);
     setMyResumes(records);
 
+    // Successful save: the current content becomes the clean baseline.
+    setBaseline(serializeResumeState(formData, settings, selectedTemplate));
     setSaveStatus("saved");
-    showToast("Resume saved successfully!", "success");
+    showToast("Résumé saved successfully.", "success");
     setTimeout(() => setSaveStatus("idle"), 3000);
   };
 
@@ -259,18 +302,61 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
 </html>`);
 
     printWin.document.close();
+    showToast("PDF export opened.", "success");
 
-    // Give the window time to render before opening the print dialog
+    // Close ONLY this temporary popup once the browser's print/export lifecycle
+    // ends. `afterprint` fires for BOTH Save and Cancel in modern browsers. We
+    // never close the main Resume Builder window and never clear résumé state.
+    printWin.onafterprint = () => {
+      try { printWin.close(); } catch { /* already closed by the user */ }
+    };
+
+    // The 700ms only delays OPENING the print dialog so the popup can render —
+    // it never force-closes the window.
     setTimeout(() => {
       try {
         printWin.focus();
         printWin.print();
       } catch {
-        // Dialog may have been blocked or window closed by the user
+        // Dialog blocked or window already closed by the user.
       }
       setPdfStatus("idle");
     }, 700);
   };
+
+  const handleView = useCallback((record: SavedResumeRecord) => {
+    // Normalise the saved snapshot (older résumés may lack newer fields) without
+    // mutating anything: no setFormData/setSettings/setResumeId, no persistence.
+    setViewState({
+      record,
+      formData: withFormDataDefaults(record.content?.formData),
+      settings: record.content?.settings ?? INITIAL_SETTINGS,
+    });
+  }, []);
+
+  // Dirty when the live content differs from the last safe baseline.
+  const isDirty = serializeResumeState(formData, settings, selectedTemplate) !== baseline;
+
+  // Guard destructive replacement: if there are unsaved changes, ask first.
+  const requestLoadRecord = (record: SavedResumeRecord) => {
+    if (isDirty) setPendingLoad(record);
+    else loadRecord(record);
+  };
+
+  const confirmPendingLoad = () => {
+    setPendingLoad((rec) => {
+      if (rec) loadRecord(rec);
+      return null;
+    });
+  };
+
+  const handleViewEdit = useCallback(() => {
+    setViewState((current) => {
+      if (current) requestLoadRecord(current.record); // guarded like the card's Edit
+      return null;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty, baseline, loadRecord]);
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("Delete this resume? This cannot be undone.")) return;
@@ -288,6 +374,7 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
       setFormData(INITIAL_FORM_DATA);
       setSettings(INITIAL_SETTINGS);
       setSelectedTemplate("Creative");
+      setBaseline(serializeResumeState(INITIAL_FORM_DATA, INITIAL_SETTINGS, "Creative"));
     }
 
     showToast("Resume deleted.", "success");
@@ -319,6 +406,28 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
             <div className="section-divider flex-1" />
           </div>
 
+          {/* Import existing résumé (Step 3) */}
+          {showImport ? (
+            <ResumeImportPanel
+              existingData={formData}
+              hasExistingData={resumeId !== null || !isResumeEmpty(formData)}
+              onApply={handleImportApply}
+              onClose={() => setShowImport(false)}
+            />
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 mb-6">
+              <span className="text-[12.5px] text-slate-400">Start from scratch, or</span>
+              <button
+                type="button"
+                onClick={() => setShowImport(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium text-slate-200 border transition-colors hover:text-white"
+                style={{ borderColor: "rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.03)" }}
+              >
+                Import existing résumé
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
             {/* Left — form + AI assistant */}
             <div className="flex flex-col gap-5">
@@ -347,6 +456,8 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
         </div>
       </section>
 
+      <ResumeAnalysisPanel formData={formData} onUpdate={handleAiUpdate} />
+
       {/* ── My Resumes ── */}
       {myResumes.length > 0 && (
         <>
@@ -354,10 +465,31 @@ export default function ResumeBuilderClient({ initialResumeId }: ResumeBuilderCl
           <MyResumesSection
             resumes={myResumes}
             activeId={resumeId}
-            onOpen={loadRecord}
+            onOpen={requestLoadRecord}
+            onView={handleView}
             onDelete={handleDelete}
           />
         </>
+      )}
+
+      {viewState && (
+        <ResumeViewModal
+          title={viewState.record.title}
+          formData={viewState.formData}
+          settings={viewState.settings}
+          onClose={() => setViewState(null)}
+          onEdit={handleViewEdit}
+        />
+      )}
+
+      {pendingLoad && (
+        <ConfirmDialog
+          title="Unsaved changes"
+          message="You have unsaved changes. If you continue, those changes will be lost."
+          confirmLabel="Discard changes and continue"
+          onConfirm={confirmPendingLoad}
+          onCancel={() => setPendingLoad(null)}
+        />
       )}
 
       {/* ── Built-in features ── */}
@@ -466,11 +598,13 @@ function MyResumesSection({
   resumes,
   activeId,
   onOpen,
+  onView,
   onDelete,
 }: {
   resumes: SavedResumeRecord[];
   activeId: string | null;
   onOpen: (record: SavedResumeRecord) => void;
+  onView: (record: SavedResumeRecord) => void;
   onDelete: (id: string) => void;
 }) {
   return (
@@ -491,6 +625,7 @@ function MyResumesSection({
               record={record}
               isActive={activeId === record.id}
               onOpen={() => onOpen(record)}
+              onView={() => onView(record)}
               onDelete={() => onDelete(record.id)}
             />
           ))}
@@ -505,11 +640,13 @@ function ResumeCard({
   record,
   isActive,
   onOpen,
+  onView,
   onDelete,
 }: {
   record: SavedResumeRecord;
   isActive: boolean;
   onOpen: () => void;
+  onView: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -576,15 +713,24 @@ function ResumeCard({
       )}
 
       {/* Actions */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onView}
+          className="flex-1 min-w-[72px] py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:opacity-90"
+          style={{ background: "rgba(255,255,255,0.05)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.1)" }}
+        >
+          View
+        </button>
+
         <button
           type="button"
           onClick={onOpen}
           disabled={isActive}
-          className="flex-1 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex-1 min-w-[72px] py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: "rgba(124,58,237,0.12)", color: "#a78bfa", border: "1px solid rgba(124,58,237,0.2)" }}
         >
-          {isActive ? "Currently editing" : "Open"}
+          {isActive ? "Currently editing" : "Edit"}
         </button>
 
         <button

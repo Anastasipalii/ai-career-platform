@@ -201,7 +201,16 @@ export default function SavedCoverLetters({ coverLetters, formatRelative, onDele
                             PDF
                           </button>
                         )}
-                        <button
+{!letter.id.startsWith("wf-") && (
+                          <Link
+                            href={`/cover-letter?id=${letter.id}`}
+                            className={actionBtn}
+                            style={{ background: "rgba(124,58,237,0.1)", color: "#a78bfa", borderColor: "rgba(124,58,237,0.2)" }}
+                          >
+                            Edit
+                          </Link>
+                        )}
+                                                <button
                           type="button"
                           onClick={() => setConfirmId(letter.id)}
                           className={actionBtn}

@@ -71,6 +71,71 @@ function buildResumeText(f: ResumeFormData): string {
     });
   }
 
+  // Projects
+  const projects = (f.projects ?? []).filter((p) => p.name.trim() || p.description.trim());
+  if (projects.length > 0) {
+    lines.push("", "PROJECTS");
+    projects.forEach((p) => {
+      lines.push("");
+      const header = [p.name, p.role].filter(Boolean).join(" — ");
+      if (header) lines.push(header);
+      const dates = p.current
+        ? [p.startDate, "Present"].filter(Boolean).join(" – ")
+        : [p.startDate, p.endDate].filter(Boolean).join(" – ");
+      if (dates) lines.push(dates);
+      if (p.url.trim()) lines.push(p.url.trim());
+      if (p.description.trim()) {
+        p.description.split("\n").map((l) => l.trim()).filter(Boolean).forEach((l) => lines.push(`- ${l}`));
+      }
+    });
+  }
+
+  // Certifications
+  const certs = (f.certifications ?? []).filter((c) => c.name.trim() || c.issuer.trim());
+  if (certs.length > 0) {
+    lines.push("", "CERTIFICATIONS");
+    certs.forEach((c) => {
+      const header = [c.name, c.issuer].filter(Boolean).join(" — ");
+      if (header) lines.push(header);
+      const meta = [
+        c.issueDate && `Issued ${c.issueDate}`,
+        c.expirationDate && `Expires ${c.expirationDate}`,
+        c.credentialId && `ID ${c.credentialId}`,
+      ].filter(Boolean).join(" | ");
+      if (meta) lines.push(meta);
+      if (c.credentialUrl.trim()) lines.push(c.credentialUrl.trim());
+    });
+  }
+
+  // Professional Links
+  const links = (f.professionalLinks ?? []).filter((l) => l.url.trim());
+  if (links.length > 0) {
+    lines.push("", "PROFESSIONAL LINKS");
+    links.forEach((l) => {
+      const label = l.label.trim();
+      lines.push(label ? `${label}: ${l.url.trim()}` : l.url.trim());
+    });
+  }
+
+  // Custom Sections (user-titled)
+  const sections = (f.customSections ?? []).filter((sec) =>
+    (sec.items ?? []).some((i) => i.heading.trim() || i.description.trim() || i.subheading.trim() || i.url.trim())
+  );
+  sections.forEach((sec) => {
+    lines.push("", (sec.title.trim() || "SECTION").toUpperCase());
+    (sec.items ?? []).forEach((i) => {
+      if (!(i.heading.trim() || i.description.trim() || i.subheading.trim() || i.url.trim())) return;
+      lines.push("");
+      const header = [i.heading, i.subheading].filter((x) => x.trim()).join(" — ");
+      const withDate = [header, i.date.trim()].filter(Boolean).join(" | ");
+      if (withDate) lines.push(withDate);
+      if (i.url.trim()) lines.push(i.url.trim());
+      if (i.description.trim()) {
+        i.description.split("\n").map((x) => x.trim()).filter(Boolean).forEach((x) => lines.push(`- ${x}`));
+      }
+    });
+  });
+
   // Languages
   if (f.languages.length > 0) {
     lines.push("", "LANGUAGES");
@@ -176,10 +241,10 @@ export default function ExportSection({
     try {
       await copyToClipboard(text);
       setCopyStatus("copied");
-      onToast("Resume text copied", "success");
+      onToast("Résumé copied to clipboard.", "success");
     } catch {
       setCopyStatus("error");
-      onToast("Could not copy resume text", "error");
+      onToast("Couldn't copy résumé text to the clipboard.", "error");
     } finally {
       setTimeout(() => setCopyStatus("idle"), 2500);
     }

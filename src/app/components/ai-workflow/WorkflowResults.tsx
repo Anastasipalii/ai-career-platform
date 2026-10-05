@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { MOCK_OUTPUTS, type WorkflowOutputs } from "./mockOutputs";
+import { useRouter } from "next/navigation";
+import { MOCK_OUTPUTS, type WorkflowOutputs, type JobMatch } from "./mockOutputs";
+import { readWorkflowResults } from "@/lib/workflowResults";
+import { saveApplicationDraft } from "@/lib/application/applicationDraft";
+import { safeHref } from "@/lib/resume/urlSafety";
+import type { ApplicationDraft } from "@/lib/application/types";
 
 // Copy plain text to the clipboard (same pattern the cover-letter page uses).
 function copyText(text: string): Promise<void> {
@@ -88,6 +93,40 @@ function AtsGauge({ score }: { score: number }) {
 
 export default function WorkflowResults({ show, results, source }: WorkflowResultsProps) {
   const [copied, setCopied] = useState(false);
+  const router = useRouter();
+
+  // Snapshot the selected REAL vacancy + run context into a client-only draft,
+  // then open the (dry-run) Application Preview. Nothing is ever submitted.
+  const prepareApplication = (m: JobMatch) => {
+    const persisted = readWorkflowResults();
+    const draft: ApplicationDraft = {
+      createdAt: new Date().toISOString(),
+      workflowRunId: persisted?.runId,
+      job: {
+        externalId: m.externalId,
+        title: m.title,
+        company: m.company,
+        location: m.location ?? null,
+        provider: m.provider,
+        jobTypes: m.jobTypes,
+        employmentType: m.jobTypes?.[0],
+        sourceUrl: m.sourceUrl,
+        matchScore: m.matchScore,
+      },
+      atsScore: (results ?? MOCK_OUTPUTS).ats.score,
+      profession: persisted?.profession,
+      targetProfession: persisted?.targetProfession,
+      resumeLanguage: persisted?.resumeLanguage,
+      resumeName: persisted?.resumeName,
+      resumeAnalyzed: Boolean(persisted?.detectedSkills?.length || persisted?.profession),
+      candidateProfilePresent: Boolean(persisted?.profession),
+      coverLetterPresent: Boolean(persisted?.coverLetterText?.trim()),
+      coverLetterPreview: persisted?.coverLetterText?.slice(0, 600),
+    };
+    saveApplicationDraft(draft);
+    router.push("/apply/preview");
+  };
+
   if (!show) return null;
   const o = results ?? MOCK_OUTPUTS;
 
@@ -223,11 +262,13 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
           <h4 className="text-[11px] uppercase tracking-widest text-slate-500 font-semibold mb-4">Top Job Matches</h4>
           {o.jobMatches.length === 0 && (
             <p className="text-slate-500 text-[12px]">
-              Run the pipeline with your resume to see roles matched to your field.
+              {o.jobsUnavailable
+                ? "Live job data is temporarily unavailable."
+                : "No relevant live vacancies were found for this profile right now."}
             </p>
           )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {o.jobMatches.slice(0, 3).map((m, i) => (
+            {o.jobMatches.slice(0, 6).map((m, i) => (
               <div
                 key={i}
                 className="rounded-xl p-4 flex flex-col gap-2.5"
@@ -245,38 +286,55 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
                     {m.matchScore}%
                   </span>
                 </div>
-                <p className="text-slate-400 text-[11.5px] leading-snug">{m.whyMatch}</p>
-                {m.missingSkills.length > 0 && (
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-slate-600 mb-1">Missing</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {m.missingSkills.map((s) => (
-                        <span
-                          key={s}
-                          className="px-2 py-0.5 rounded-md text-[11px]"
-                          style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.28)" }}
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                {(m.location || m.remote || (m.jobTypes && m.jobTypes.length) || m.publishedAt || m.provider) && (
+                  <p className="text-slate-500 text-[11px] leading-snug">
+                    {[
+                      m.location || null,
+                      m.remote ? "Remote" : null,
+                      m.jobTypes && m.jobTypes.length ? m.jobTypes.join(" / ") : null,
+                      m.publishedAt ? new Date(m.publishedAt).toLocaleDateString() : null,
+                      m.provider ? `via ${m.provider.charAt(0).toUpperCase()}${m.provider.slice(1)}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
                 )}
-                {m.recommendedSkills.length > 0 && (
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-slate-600 mb-1">Learn next</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {m.recommendedSkills.map((s) => (
-                        <span
-                          key={s}
-                          className="px-2 py-0.5 rounded-md text-[11px]"
-                          style={{ background: "rgba(124,58,237,0.1)", color: "#c4b5fd", border: "1px solid rgba(124,58,237,0.28)" }}
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                {/* Strengths / missing / learn-next are stored on the run but
+                    intentionally hidden on the compact card (kept for a future
+                    detailed vacancy page). */}
+                {/* Prepare Application (dry run) + the REAL provider listing.
+                    Neither ever submits an application. */}
+                <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1">
+                  {!m.synthetic && (
+                    <button
+                      type="button"
+                      onClick={() => prepareApplication(m)}
+                      className="inline-flex items-center gap-1 text-[11.5px] font-semibold px-2.5 py-1 rounded-md text-white transition hover:opacity-90"
+                      style={{ background: "linear-gradient(135deg, #7c3aed, #06b6d4)" }}
+                    >
+                      Prepare Application
+                    </button>
+                  )}
+                  {(() => {
+                    // Provider URL only, validated (http/https). No safe URL → no clickable apply.
+                    const apply = safeHref(m.sourceUrl ?? "");
+                    return apply ? (
+                      <a
+                        href={apply}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11.5px] font-medium hover:underline"
+                        style={{ color: "#7dd3fc" }}
+                      >
+                        View &amp; apply ↗
+                      </a>
+                    ) : null;
+                  })()}
+                </div>
+                {safeHref(m.sourceUrl ?? "") && (
+                  <p className="text-[10px] text-slate-600 leading-snug">
+                    Availability and application options are controlled by the external provider.
+                  </p>
                 )}
               </div>
             ))}

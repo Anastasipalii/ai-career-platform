@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored, minified PDF.js worker (Mozilla, Apache-2.0, from pdfjs-dist),
+    // served at /pdf.worker.min.mjs for client-side résumé parsing. It is a
+    // generated third-party asset, not CareerAI source — exclude it from lint.
+    "public/pdf.worker*.mjs",
   ]),
 ]);
 

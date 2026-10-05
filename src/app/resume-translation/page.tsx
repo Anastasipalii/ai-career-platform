@@ -6,15 +6,20 @@ import ResumeTranslationClient from "@/app/components/resume-translation/ResumeT
 export const metadata: Metadata = {
   title: "AI Resume Translation — CareerAI",
   description:
-    "Translate your resume into 25+ languages while preserving professional formatting, ATS structure, and local job-market tone.",
+    "Translate your resume text into 25+ languages faithfully — preserving your facts, numbers, dates, and section structure.",
 };
 
-export default function ResumeTranslationPage() {
+interface PageProps {
+  searchParams: Promise<{ id?: string }>;
+}
+
+export default async function ResumeTranslationPage({ searchParams }: PageProps) {
+  const { id } = await searchParams;
   return (
     <>
       <Navbar />
       <main className="pt-16">
-        <ResumeTranslationClient />
+        <ResumeTranslationClient initialTranslationId={id} />
       </main>
       <Footer />
     </>
