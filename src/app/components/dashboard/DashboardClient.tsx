@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -12,6 +12,7 @@ import {
   type WorkflowResults,
 } from "@/lib/workflowResults";
 import { readRecentWorkflowRuns, type WorkflowRunRow, type WorkflowJobMatch } from "@/lib/workflowRun";
+import { getCurrentUserId, clearCareerAISensitive } from "@/lib/security/clientStorage";
 
 // Map a Supabase workflow_runs row onto the same shape the Dashboard already
 // uses for stats + recent activity (keeps the UI unchanged).
@@ -54,7 +55,12 @@ import WorkflowStatusCard from "@/app/components/dashboard/WorkflowStatusCard";
 import RoadmapNextSteps, { hasRoadmap } from "@/app/components/dashboard/RoadmapNextSteps";
 import QuickActions from "@/app/components/dashboard/QuickActions";
 import SavedResumes from "@/app/components/dashboard/SavedResumes";
+import ResumeViewModal from "@/app/components/resume-builder/ResumeViewModal";
+import { withFormDataDefaults } from "@/lib/resume/importResume";
+import type { ResumeFormData, CustomizationSettings } from "@/app/components/resume-builder/types";
 import SavedCoverLetters from "@/app/components/dashboard/SavedCoverLetters";
+import SavedLinkedIn from "@/app/components/dashboard/SavedLinkedIn";
+import SavedTranslations from "@/app/components/dashboard/SavedTranslations";
 import JobMatchesWidget from "@/app/components/dashboard/JobMatchesWidget";
 import PreparedApplications from "@/app/components/dashboard/PreparedApplications";
 import RoadmapWidget from "@/app/components/dashboard/RoadmapWidget";
@@ -71,12 +77,35 @@ export interface ResumeRow {
   updated_at: string;
 }
 
+// Fallback preview settings for a saved résumé whose content has no settings blob.
+const DEFAULT_VIEW_SETTINGS: CustomizationSettings = {
+  colorTheme: "Purple Neon",
+  font: "Minimal",
+  layout: "One-column",
+  spacing: "Balanced",
+};
+
 export interface CoverLetterRow {
   id: string;
   company_name: string;
   job_title: string;
   language: string;
   content: string;
+  updated_at: string;
+}
+
+export interface TranslationRow {
+  id: string;
+  source_language: string;
+  target_language: string;
+  updated_at: string;
+}
+
+export interface LinkedInProfileRow {
+  id: string;
+  headline: string | null;
+  about: string | null;
+  skills: string[];
   updated_at: string;
 }
 
@@ -106,6 +135,13 @@ export interface JobMatchRow {
   publishedAt?: string | null;
   /** Real provider listing URL (present for live jobs). Opens externally. */
   sourceUrl?: string;
+  // ── Persisted provenance (present for saved job_matches table rows) ──
+  provider?: string | null;
+  provider_job_id?: string | null;
+  source_url?: string | null;
+  apply_url?: string | null;
+  /** True for rows read from the job_matches table (saved by the user). */
+  isSaved?: boolean;
 }
 
 export interface CareerPathRow {
@@ -135,15 +171,27 @@ export default function DashboardClient() {
   const [authed, setAuthed]           = useState<boolean | null>(null);
 
   const [resumes, setResumes]               = useState<ResumeRow[]>([]);
+  // Read-only View of a saved résumé. Content is fetched on demand (a READ, never
+  // a write) and shown via the shared ResumeViewModal; nothing is edited/persisted.
+  const [viewResume, setViewResume] = useState<{
+    id: string; title: string; formData: ResumeFormData; settings: CustomizationSettings;
+  } | null>(null);
+  const [viewLoadingId, setViewLoadingId] = useState<string | null>(null);
   const [coverLetters, setCoverLetters]     = useState<CoverLetterRow[]>([]);
+  const [linkedinProfiles, setLinkedinProfiles] = useState<LinkedInProfileRow[]>([]);
+  const [translations, setTranslations]     = useState<TranslationRow[]>([]);
   const [interviews, setInterviews]         = useState<InterviewRow[]>([]);
   const [jobMatches, setJobMatches]         = useState<JobMatchRow[]>([]);
   const [careerPath, setCareerPath]         = useState<CareerPathRow | null>(null);
+  const [careerPaths, setCareerPaths]       = useState<CareerPathRow[]>([]);
   const [languageCount, setLanguageCount]   = useState(0);
   // Latest AI Workflow run (drives the run-specific widgets).
   const [workflow, setWorkflow]             = useState<WorkflowResults | null>(null);
   // Previous runs (kept so history stays visible in Recent Activity).
   const [pastRuns, setPastRuns]             = useState<WorkflowResults[]>([]);
+  // Identity of the load currently considered authoritative — guards against an
+  // A→B account switch where A's in-flight load would otherwise populate B's UI.
+  const latestUidRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
       // ── Auth gate: no session → no personal data, show CTA. ───────────────
@@ -161,6 +209,7 @@ export default function DashboardClient() {
       }
       setAuthed(true);
       const uid = session.user.id;
+      latestUidRef.current = uid;
 
       // Real profile for the header (falls back to the email local-part).
       const { data: profile } = await supabase
@@ -183,7 +232,7 @@ export default function DashboardClient() {
       const recentRows = await readRecentWorkflowRuns(10);
       const remoteMappedList = recentRows.map(mapRunRowToResults);
       const remoteMapped = remoteMappedList[0] ?? null;
-      const localRun = readWorkflowResults();
+      const localRun = readWorkflowResults(uid);
       const timeOf = (r: WorkflowResults | null) =>
         r ? new Date(r.completedAt).getTime() || 0 : -1;
       const latestRun =
@@ -195,21 +244,23 @@ export default function DashboardClient() {
       );
       // STEP 6 — the runId the dashboard is actually displaying (proves it is
       // the latest current run, not a stale Supabase/localStorage row).
-      if (latestRun) {
-        console.log(
-          "[CareerAI] STEP 6 dashboard displaying runId:", latestRun.runId ?? "(remote row — no runId)",
-          "| completedAt:", latestRun.completedAt,
-          "| atsScore:", latestRun.atsScore,
-          "| stored job match count:", (latestRun.jobMatches ?? []).length,
-          "| firstId:", latestRun.jobMatches?.[0]?.externalId ?? "(none)",
-          "| store:", timeOf(localRun) > timeOf(remoteMapped) ? "localStorage" : "supabase"
-        );
-      } else {
-        console.log("[CareerAI] STEP 6 dashboard displaying runId: (no run found) | stored job match count: 0");
+      if (process.env.NODE_ENV !== "production") {
+        if (latestRun) {
+          console.log(
+            "[CareerAI] STEP 6 dashboard displaying runId:", latestRun.runId ?? "(remote row — no runId)",
+            "| completedAt:", latestRun.completedAt,
+            "| atsScore:", latestRun.atsScore,
+            "| stored job match count:", (latestRun.jobMatches ?? []).length,
+            "| firstId:", latestRun.jobMatches?.[0]?.externalId ?? "(none)",
+            "| store:", timeOf(localRun) > timeOf(remoteMapped) ? "localStorage" : "supabase"
+          );
+        } else {
+          console.log("[CareerAI] STEP 6 dashboard displaying runId: (no run found) | stored job match count: 0");
+        }
       }
       setWorkflow(latestRun);
 
-      const [resumesRes, coversRes, interviewsRes, matchesRes, pathsRes, transRes] =
+      const [resumesRes, coversRes, interviewsRes, matchesRes, pathsRes, transRes, linkedinRes] =
         await Promise.all([
           supabase
             .from("resumes")
@@ -231,7 +282,7 @@ export default function DashboardClient() {
 
           supabase
             .from("job_matches")
-            .select("id, job_title, company_name, match_score, created_at")
+            .select("id, job_title, company_name, match_score, created_at, provider, provider_job_id, source_url, apply_url")
             .eq("user_id", uid)
             .order("match_score", { ascending: false }),
 
@@ -239,24 +290,38 @@ export default function DashboardClient() {
             .from("career_paths")
             .select("id, current_role, target_role, progress, updated_at")
             .eq("user_id", uid)
-            .order("updated_at", { ascending: false })
-            .limit(1),
+            .order("updated_at", { ascending: false }),
 
           supabase
             .from("translations")
-            .select("target_language")
-            .eq("user_id", uid),
+            .select("id, source_language, target_language, updated_at")
+            .eq("user_id", uid)
+            .order("updated_at", { ascending: false }),
+
+          supabase
+            .from("linkedin_profiles")
+            .select("id, headline, about, skills, updated_at")
+            .eq("user_id", uid)
+            .order("updated_at", { ascending: false }),
         ]);
 
+      if (latestUidRef.current !== uid) return; // account switched mid-load — drop stale results
       setResumes((resumesRes.data ?? []) as ResumeRow[]);
       setCoverLetters((coversRes.data ?? []) as CoverLetterRow[]);
+      setLinkedinProfiles((linkedinRes.data ?? []) as LinkedInProfileRow[]);
       setInterviews((interviewsRes.data ?? []) as InterviewRow[]);
-      setJobMatches((matchesRes.data ?? []) as JobMatchRow[]);
-      setCareerPath(((pathsRes.data ?? [])[0] as CareerPathRow) ?? null);
-
-      const uniqueLangs = new Set(
-        (transRes.data ?? []).map((t: { target_language: string }) => t.target_language)
+      setJobMatches(
+        ((matchesRes.data ?? []) as JobMatchRow[]).map((r) => ({ ...r, isSaved: true })),
       );
+      {
+        const paths = (pathsRes.data ?? []) as CareerPathRow[];
+        setCareerPaths(paths);
+        setCareerPath(paths[0] ?? null);
+      }
+
+      const transRows = (transRes.data ?? []) as TranslationRow[];
+      setTranslations(transRows);
+      const uniqueLangs = new Set(transRows.map((t) => t.target_language));
       setLanguageCount(uniqueLangs.size);
   }, []);
 
@@ -269,7 +334,11 @@ export default function DashboardClient() {
     // Initial load scheduled as a microtask (not a synchronous setState call).
     Promise.resolve().then(reload);
     const onVisible = () => { if (document.visibilityState === "visible") reload(); };
-    const onStorage = (e: StorageEvent) => { if (e.key === WORKFLOW_RESULTS_KEY) reload(); };
+    const onStorage = (e: StorageEvent) => {
+      // Workflow results now live under a per-user scoped key (careerai:u:<id>:…);
+      // the legacy global key is also matched for safety.
+      if (!e.key || e.key === WORKFLOW_RESULTS_KEY || /^careerai:u:.*:workflow-results$/.test(e.key)) reload();
+    };
     window.addEventListener(WORKFLOW_UPDATED_EVENT, reload);
     window.addEventListener("focus", reload);
     document.addEventListener("visibilitychange", onVisible);
@@ -281,6 +350,33 @@ export default function DashboardClient() {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("storage", onStorage);
     };
+  }, [load]);
+
+  // ── Account-transition isolation ────────────────────────────────────────────
+  // On sign-out or an A→B switch, immediately drop the previous user's cards so
+  // the next user never sees a flash of someone else's data; reload for the new
+  // user. DB reads remain owner-scoped (RLS + .eq(user_id)); this governs the
+  // CLIENT-side cached arrays.
+  useEffect(() => {
+    const resetAll = () => {
+      setResumes([]); setCoverLetters([]); setLinkedinProfiles([]); setInterviews([]);
+      setJobMatches([]); setCareerPaths([]); setCareerPath(null); setTranslations([]);
+      setWorkflow(null); setPastRuns([]); setLanguageCount(0);
+      setUserEmail(null); setDisplayName(null);
+    };
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextUid = session?.user?.id ?? null;
+      if (event === "SIGNED_OUT") {
+        latestUidRef.current = null;
+        setAuthed(false);
+        resetAll();
+      } else if (nextUid && nextUid !== latestUidRef.current) {
+        // New/changed authenticated user — clear stale cards, then load theirs.
+        resetAll();
+        load();
+      }
+    });
+    return () => sub.subscription.unsubscribe();
   }, [load]);
 
   // ── Derived values ────────────────────────────────────────────────────────
@@ -440,9 +536,43 @@ export default function DashboardClient() {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleLogout = async () => {
+    // Clear this user's CareerAI sensitive browser state + legacy unscoped keys
+    // BEFORE signing out, so nothing survives for the next account on this device.
+    // (The SIGNED_OUT auth listener also clears, defensively.)
+    clearCareerAISensitive(getCurrentUserId());
     await supabase.auth.signOut();
     router.push("/login");
   };
+
+  const handleViewResume = useCallback(async (id: string) => {
+    // Synthetic workflow-only row has no saved DB record to view.
+    if (id === "wf-resume") return;
+    setViewLoadingId(id);
+    const { data, error } = await supabase
+      .from("resumes")
+      .select("content, title")
+      .eq("id", id)
+      .single();
+    setViewLoadingId(null);
+    if (error || !data) return; // read-only: on failure, do nothing (no mutation)
+    const content = (data.content ?? {}) as {
+      formData?: Partial<ResumeFormData>;
+      settings?: CustomizationSettings;
+    };
+    setViewResume({
+      id,
+      title: (data.title as string) ?? "Résumé",
+      formData: withFormDataDefaults(content.formData),
+      settings: content.settings ?? DEFAULT_VIEW_SETTINGS,
+    });
+  }, []);
+
+  const handleViewEdit = useCallback(() => {
+    setViewResume((current) => {
+      if (current) router.push(`/resume-builder?id=${current.id}`); // existing Dashboard→Builder edit path
+      return null;
+    });
+  }, [router]);
 
   const handleDeleteResume = async (id: string) => {
     const { error } = await supabase.from("resumes").delete().eq("id", id);
@@ -464,6 +594,49 @@ export default function DashboardClient() {
     const { error } = await supabase.from("cover_letters").delete().eq("id", id);
     if (!error) {
       setCoverLetters((prev) => prev.filter((c) => c.id !== id));
+    }
+  };
+
+  const handleDeleteLinkedIn = async (id: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { error } = await supabase
+      .from("linkedin_profiles")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", session.user.id); // owner-scoped on top of RLS
+    if (!error) {
+      setLinkedinProfiles((prev) => prev.filter((l) => l.id !== id));
+    }
+  };
+
+  const handleDeleteTranslation = async (id: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { error } = await supabase
+      .from("translations")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", session.user.id); // owner-scoped on top of RLS
+    if (!error) {
+      setTranslations((prev) => prev.filter((t) => t.id !== id));
+    }
+  };
+
+  const handleDeleteCareerPath = async (id: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { error } = await supabase
+      .from("career_paths")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", session.user.id); // owner-scoped on top of RLS
+    if (!error) {
+      setCareerPaths((prev) => {
+        const next = prev.filter((c) => c.id !== id);
+        setCareerPath(next[0] ?? null);
+        return next;
+      });
     }
   };
 
@@ -572,7 +745,7 @@ export default function DashboardClient() {
             <RecentActivity activities={activities} formatRelative={formatRelative} />
             <div className="flex flex-col gap-5">
               <QuickActions />
-              {showSidebarRoadmap && <RoadmapWidget careerPath={careerPath} />}
+              {showSidebarRoadmap && <RoadmapWidget careerPaths={careerPaths} formatRelative={formatRelative} onDelete={handleDeleteCareerPath} />}
             </div>
           </div>
 
@@ -597,6 +770,8 @@ export default function DashboardClient() {
             <SavedResumes
               resumes={resumeRows}
               formatRelative={formatRelative}
+              onView={handleViewResume}
+              viewLoadingId={viewLoadingId}
               onDelete={handleDeleteResume}
               onRename={handleRenameResume}
             />
@@ -615,6 +790,22 @@ export default function DashboardClient() {
             />
           </div>
 
+          <div className="mb-5">
+            <SavedLinkedIn
+              profiles={linkedinProfiles}
+              formatRelative={formatRelative}
+              onDelete={handleDeleteLinkedIn}
+            />
+          </div>
+
+          <div className="mb-5">
+            <SavedTranslations
+              translations={translations}
+              formatRelative={formatRelative}
+              onDelete={handleDeleteTranslation}
+            />
+          </div>
+
           <div className="mb-8">
             <PreparedApplications />
           </div>
@@ -622,6 +813,16 @@ export default function DashboardClient() {
           <p className="text-xs text-slate-700 text-center pb-2">CareerAI · Your data is private and secured</p>
         </main>
       </div>
+
+      {viewResume && (
+        <ResumeViewModal
+          title={viewResume.title}
+          formData={viewResume.formData}
+          settings={viewResume.settings}
+          onClose={() => setViewResume(null)}
+          onEdit={handleViewEdit}
+        />
+      )}
     </div>
   );
 }

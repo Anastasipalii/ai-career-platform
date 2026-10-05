@@ -12,6 +12,10 @@ export interface ResumeFormData {
   experience: ExperienceEntry[];
   education: EducationEntry[];
   languages: LanguageEntry[];
+  projects: ProjectEntry[];
+  certifications: CertificationEntry[];
+  professionalLinks: ProfessionalLink[];
+  customSections: CustomSection[];
 }
 
 export const TRANSLATION_LANGUAGES = [
@@ -63,7 +67,49 @@ export interface EducationEntry {
 export interface LanguageEntry {
   id: string;
   language: string;
-  proficiency: "Native" | "Fluent" | "Conversational" | "Basic";
+  proficiency: "Native" | "Fluent" | "Conversational" | "Basic" | "";
+}
+
+export interface ProjectEntry {
+  id: string;
+  name: string;
+  role: string;
+  startDate: string;
+  endDate: string;
+  current: boolean;
+  description: string;
+  url: string;
+}
+
+export interface CertificationEntry {
+  id: string;
+  name: string;
+  issuer: string;
+  issueDate: string;
+  expirationDate: string;
+  credentialId: string;
+  credentialUrl: string;
+}
+
+export interface ProfessionalLink {
+  id: string;
+  label: string;
+  url: string;
+}
+
+export interface CustomSectionItem {
+  id: string;
+  heading: string;
+  subheading: string;
+  date: string;
+  description: string;
+  url: string;
+}
+
+export interface CustomSection {
+  id: string;
+  title: string;
+  items: CustomSectionItem[];
 }
 
 export type ColorTheme =

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withGuard } from "@/lib/security/guard";
 import { fetchArbeitnowJobs } from "@/lib/jobs/providers/arbeitnow";
 import { fetchJoobleJobs } from "@/lib/jobs/providers/jooble";
 import { combineProviderResults, balancePool } from "@/lib/jobs/merge";
@@ -62,7 +63,8 @@ function devLog(...args: unknown[]) {
   if (process.env.NODE_ENV !== "production") console.log(...args);
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "PROVIDER_SEARCH", async (): Promise<Response> => {
   let body: SearchBody;
   try {
     body = (await req.json()) as SearchBody;
@@ -163,5 +165,6 @@ export async function POST(req: NextRequest) {
     count: balanced.length,
     jobs: balanced,
     diagnostics,
+  });
   });
 }

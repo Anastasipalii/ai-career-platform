@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { JobMatchRow } from "@/app/components/dashboard/DashboardClient";
+import { safeHref } from "@/lib/resume/urlSafety";
 
 interface JobMatchesWidgetProps {
   matches: JobMatchRow[];
@@ -96,20 +97,49 @@ export default function JobMatchesWidget({ matches, formatRelative }: JobMatches
                   {/* Strengths / missing / learn-next are stored on the run but
                       intentionally hidden on the compact card (kept for a future
                       detailed vacancy page). */}
-                  {/* Opens the REAL provider listing in a new tab — never submits. */}
-                  {match.sourceUrl && (
-                    <div className="mt-1.5">
-                      <a
-                        href={match.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] font-medium hover:underline"
-                        style={{ color: "#7dd3fc" }}
-                      >
-                        View &amp; apply ↗
-                      </a>
-                    </div>
-                  )}
+                  {(() => {
+                    // A saved row read from the job_matches table (not a current
+                    // workflow-run row, which uses a synthetic "wf-" id).
+                    const isSavedRow = match.isSaved === true && !match.id.startsWith("wf-");
+                    // Provider-verified means BOTH provenance fields were persisted
+                    // from the real provider. Legacy rows (provider null) are never
+                    // treated as verified and never get a constructed apply link.
+                    const verified = !!(match.provider && match.provider_job_id);
+                    // Only ever open a URL that passes the http/https safety check.
+                    const apply =
+                      safeHref(match.apply_url ?? "") ??
+                      safeHref(match.source_url ?? "") ??
+                      safeHref(match.sourceUrl ?? "");
+                    // Saved rows → open the stored match page (it renders the safe
+                    // apply itself). Current-run rows → direct safe external apply.
+                    const showApply = isSavedRow ? verified && !!apply : !!apply;
+                    if (!isSavedRow && !showApply) return null;
+                    return (
+                      <div className="mt-1.5 flex items-center gap-3">
+                        {isSavedRow && (
+                          <Link
+                            href={`/job-match?id=${match.id}`}
+                            className="text-[11px] font-medium hover:underline"
+                            style={{ color: "#c4b5fd" }}
+                          >
+                            View →
+                          </Link>
+                        )}
+                        {/* Opens the REAL provider listing in a new tab — never submits. */}
+                        {showApply && apply && (
+                          <a
+                            href={apply}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] font-medium hover:underline"
+                            style={{ color: "#7dd3fc" }}
+                          >
+                            View &amp; apply ↗
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );

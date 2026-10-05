@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { authedFetch } from "@/lib/auth/authedFetch";
 import SearchPreferences from "./SearchPreferences";
 import { FLOW_STEPS, type WorkflowStepStatus } from "./flowSteps";
 import { usePipeline } from "./usePipeline";
@@ -136,7 +137,7 @@ async function postJson(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
+    const res = await authedFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -1074,7 +1075,8 @@ export default function WorkflowCanvas() {
             </h2>
             <p className="text-slate-400 text-sm mt-2 max-w-xl leading-relaxed">
               Eight AI steps, one flow — from a raw resume to a tracked application. Click any node
-              for details, or run the pipeline to watch it execute.
+              for details, or run the pipeline. The step animation is a progress indicator while the
+              AI runs in the background; your generated results are what&apos;s authoritative.
             </p>
           </div>
 

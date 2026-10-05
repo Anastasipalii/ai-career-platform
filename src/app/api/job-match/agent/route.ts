@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest, NextResponse } from "next/server";
 import { withRetryOn429 } from "@/lib/openaiRetry";
 import type { ResumeAnalysis } from "@/lib/workflowRun";
@@ -81,7 +82,8 @@ function baseMatch(job: NormalizedJob, score: number, why: string): RankedMatch 
   };
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   let body: AgentBody;
   try {
     body = (await req.json()) as AgentBody;
@@ -218,4 +220,5 @@ Only include ids from the list above. Order by matchScore descending.`;
     // Model failed → still return the REAL jobs, just unranked. No fabrication.
     return json("provider-only", providerOnly());
   }
+  });
 }

@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { authedFetch } from "@/lib/auth/authedFetch";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { CoverLetterFormData } from "@/app/components/cover-letter/types";
+import { CoverLetterFormData, LANGUAGE_OPTIONS, LanguageOption } from "@/app/components/cover-letter/types";
+import type { CandidateIdentity } from "@/lib/coverLetter/identity";
+import { buildFullLetter } from "@/lib/coverLetter/buildLetter";
 import Toast from "@/app/components/ui/Toast";
 import CoverLetterHero from "@/app/components/cover-letter/CoverLetterHero";
 import CoverLetterForm from "@/app/components/cover-letter/CoverLetterForm";
@@ -16,21 +19,36 @@ const INITIAL_FORM: CoverLetterFormData = {
   jobDescription: "",
   tone:           "Professional",
   language:       "English (US)",
-  // Advanced (hidden from form — kept for API compatibility)
+  // Real candidate identity — prefilled from the résumé, user-editable.
   fullName:       "",
+  email:          "",
+  phone:          "",
+  location:       "",
   jobTitle:       "",
   company:        "",
-  resumeSummary:  "",
-  keySkills:      "",
+  // Extracted résumé text (client-side) — factual background for generation.
+  resumeText:     "",
 };
 
-export default function CoverLetterClient() {
+const isLanguageOption = (v: string): v is LanguageOption =>
+  (LANGUAGE_OPTIONS as string[]).includes(v);
+
+interface CoverLetterClientProps {
+  /** When present, reopen this saved cover letter for editing (owner-scoped). */
+  initialLetterId?: string;
+}
+
+export default function CoverLetterClient({ initialLetterId }: CoverLetterClientProps) {
   const router = useRouter();
   const [formData, setFormData]         = useState<CoverLetterFormData>(INITIAL_FORM);
   const [generated, setGenerated]       = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [aiContent, setAiContent]       = useState<string>("");
+  // The current letter BODY — streamed from the AI and then directly editable.
+  const [body, setBody]                 = useState<string>("");
   const [saveStatus, setSaveStatus]     = useState<"idle" | "saving" | "saved">("idle");
+  // The saved row currently being edited (set on reopen or after a first insert)
+  // so repeated saves UPDATE the same record instead of duplicating it.
+  const [editingId, setEditingId]       = useState<string | null>(null);
   const [toast, setToast]               = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const showToast = useCallback((message: string, type: "success" | "error") => {
@@ -38,6 +56,59 @@ export default function CoverLetterClient() {
     setTimeout(() => setToast(null), 3500);
   }, []);
 
+  // ── Reopen a saved letter for editing ───────────────────────────────────────
+  // Loads ONLY what is genuinely stored (company_name, job_title, language,
+  // content). The schema has no candidate identity or original résumé/JD, so
+  // those fields stay blank — never reconstructed or invented.
+  useEffect(() => {
+    if (!initialLetterId) return;
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push("/login"); return; }
+      const { data, error } = await supabase
+        .from("cover_letters")
+        .select("id, company_name, job_title, language, content")
+        .eq("id", initialLetterId)
+        .eq("user_id", session.user.id) // defensive; RLS already restricts to owner
+        .single();
+      if (cancelled) return;
+      if (error || !data) { showToast("Couldn't open that cover letter.", "error"); return; }
+
+      const row = data as { id: string; company_name: string; job_title: string; language: string; content: string };
+      setFormData((prev) => ({
+        ...prev,
+        company:  row.company_name ?? "",
+        jobTitle: row.job_title ?? "",
+        language: isLanguageOption(row.language) ? row.language : prev.language,
+      }));
+      setBody(row.content ?? "");
+      setGenerated(true);
+      setEditingId(row.id);
+      showToast("Loaded your saved cover letter for editing.", "success");
+    })();
+    return () => { cancelled = true; };
+  }, [initialLetterId, router, showToast]);
+
+  // Résumé parsed entirely in the browser (ResumeUpload). We store the extracted
+  // TEXT as the factual background and PREFILL only still-empty identity fields,
+  // so user edits always win and nothing is fabricated.
+  const handleResumeParsed = useCallback(
+    ({ text, identity, fileName }: { text: string; identity: CandidateIdentity; fileName: string }) => {
+      setFormData((prev) => ({
+        ...prev,
+        resumeText: text,
+        fullName:   prev.fullName || identity.fullName,
+        email:      prev.email    || identity.email,
+        phone:      prev.phone    || identity.phone,
+        location:   prev.location || identity.location,
+      }));
+      if (fileName) showToast("Résumé parsed — review your details below.", "success");
+    },
+    [showToast]
+  );
+
+  // Explicit (re)generation — the ONLY thing that replaces a manually edited body.
   const handleGenerate = async () => {
     if (!formData.jobDescription.trim()) {
       showToast("Please paste a job description or vacancy URL.", "error");
@@ -46,13 +117,24 @@ export default function CoverLetterClient() {
 
     setIsGenerating(true);
     setGenerated(false);
-    setAiContent("");
+    setBody("");
 
     try {
-      const res = await fetch("/api/cover-letter/generate", {
+      const res = await authedFetch("/api/cover-letter/standalone", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(formData),
+        body:    JSON.stringify({
+          jobDescription: formData.jobDescription,
+          tone:           formData.tone,
+          language:       formData.language,
+          fullName:       formData.fullName,
+          email:          formData.email,
+          phone:          formData.phone,
+          location:       formData.location,
+          targetRole:     formData.jobTitle,
+          company:        formData.company,
+          resumeText:     formData.resumeText,
+        }),
       });
 
       if (!res.ok) {
@@ -69,7 +151,7 @@ export default function CoverLetterClient() {
         const { done, value } = await reader.read();
         if (done) break;
         accumulated += decoder.decode(value, { stream: true });
-        setAiContent(accumulated);
+        setBody(accumulated);
       }
 
       setGenerated(true);
@@ -80,8 +162,10 @@ export default function CoverLetterClient() {
     }
   };
 
+  // Save the CURRENT edited letter. Updates the reopened/just-saved record when
+  // there is one (no duplicate rows on repeated clicks); inserts otherwise.
   const handleSave = async () => {
-    if (!generated || !aiContent.trim()) {
+    if (!generated || !body.trim()) {
       showToast("Generate a cover letter first.", "error");
       return;
     }
@@ -90,33 +174,58 @@ export default function CoverLetterClient() {
     if (!session) { router.push("/login"); return; }
 
     setSaveStatus("saving");
-    const { error } = await supabase.from("cover_letters").insert({
-      user_id:      session.user.id,
-      company_name: formData.company   || "Job Application",
-      job_title:    formData.jobTitle  || "Cover Letter",
+    const payload = {
+      company_name: formData.company.trim()  || "Untitled company",
+      job_title:    formData.jobTitle.trim() || "Cover letter",
       language:     formData.language,
-      content:      aiContent,
-    });
+      content:      body, // the current edited body is what reopen loads back
+    };
 
-    if (error) {
-      setSaveStatus("idle");
-      showToast(`Save failed: ${error.message}`, "error");
-    } else {
+    if (editingId) {
+      const { error } = await supabase
+        .from("cover_letters")
+        .update(payload)
+        .eq("id", editingId)
+        .eq("user_id", session.user.id);
+      if (error) {
+        setSaveStatus("idle");
+        showToast("Couldn't update your cover letter. Please try again.", "error");
+        return;
+      }
       setSaveStatus("saved");
-      showToast("Cover letter saved to your dashboard!", "success");
+      showToast("Cover letter updated.", "success");
       setTimeout(() => setSaveStatus("idle"), 3000);
+      return;
     }
+
+    const { data, error } = await supabase
+      .from("cover_letters")
+      .insert({ ...payload, user_id: session.user.id })
+      .select("id")
+      .single();
+    if (error || !data) {
+      setSaveStatus("idle");
+      showToast("Couldn't save your cover letter. Please try again.", "error");
+      return;
+    }
+    setEditingId((data as { id: string }).id); // further saves update this row
+    setSaveStatus("saved");
+    showToast("Cover letter saved to your dashboard!", "success");
+    setTimeout(() => setSaveStatus("idle"), 3000);
   };
 
+  // Copy the COMPLETE real letter (identity + company/role + current body),
+  // never just the AI body. Missing fields are omitted, not faked.
   const handleCopy = () => {
-    if (!aiContent) return;
-    navigator.clipboard.writeText(aiContent)
-      .then(() => showToast("Copied to clipboard!", "success"))
-      .catch(() => showToast("Copy failed.", "error"));
+    if (!body.trim()) return;
+    const letter = buildFullLetter(formData, body);
+    navigator.clipboard.writeText(letter)
+      .then(() => showToast("Full letter copied to clipboard.", "success"))
+      .catch(() => showToast("Couldn't copy to the clipboard.", "error"));
   };
 
   const handleDownload = () => {
-    if (!aiContent) return;
+    if (!body.trim()) return;
     const el = document.getElementById("cover-letter-document");
     if (!el) { showToast("Preview not found.", "error"); return; }
 
@@ -130,6 +239,8 @@ export default function CoverLetterClient() {
     win.document.close();
     setTimeout(() => { try { win.focus(); win.print(); } catch {} }, 600);
   };
+
+  const hasLetter = generated || body.trim().length > 0;
 
   return (
     <>
@@ -148,7 +259,7 @@ export default function CoverLetterClient() {
           <div className="flex items-center gap-3 mb-10">
             <div className="section-divider flex-1" />
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
-              Cover letter generator
+              {editingId ? "Editing a saved cover letter" : "Cover letter generator"}
             </span>
             <div className="section-divider flex-1" />
           </div>
@@ -156,7 +267,7 @@ export default function CoverLetterClient() {
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
             {/* Left — upload first, then form */}
             <div className="flex flex-col gap-5">
-              <ResumeUpload />
+              <ResumeUpload onParsed={handleResumeParsed} onError={(m) => showToast(m, "error")} />
               <CoverLetterForm
                 formData={formData}
                 onChange={setFormData}
@@ -165,19 +276,46 @@ export default function CoverLetterClient() {
               />
             </div>
 
-            {/* Right — sticky preview + export */}
+            {/* Right — sticky preview + editable body + export */}
             <div className="lg:sticky lg:top-24 self-start flex flex-col gap-5">
-              <CoverLetterPreview formData={formData} generated={generated} aiContent={aiContent} />
+              <CoverLetterPreview formData={formData} generated={generated} aiContent={body} />
+
+              {/* Editable letter body — manual edits flow straight to the preview.
+                  Only an explicit Generate replaces this text. */}
+              {hasLetter && (
+                <div
+                  className="rounded-2xl p-5 border"
+                  style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
+                >
+                  <label htmlFor="cover-letter-body" className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+                    Edit letter text
+                  </label>
+                  <textarea
+                    id="cover-letter-body"
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    disabled={isGenerating}
+                    rows={12}
+                    spellCheck
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 resize-y leading-relaxed disabled:opacity-60"
+                    placeholder="Your generated letter appears here and is fully editable…"
+                  />
+                  <p className="text-[11px] text-slate-600 mt-2">
+                    Edits update the preview instantly. Your text is only replaced if you press Generate again.
+                  </p>
+                </div>
+              )}
+
               <ExportActions
                 name={formData.fullName}
-                generated={generated}
+                generated={hasLetter}
                 saveStatus={saveStatus}
                 onSave={handleSave}
                 onCopy={handleCopy}
                 onDownload={handleDownload}
               />
 
-              {generated && (
+              {hasLetter && (
                 <p className="text-xs text-slate-600 text-center -mt-1">
                   Edit any field and click{" "}
                   <button
@@ -187,7 +325,7 @@ export default function CoverLetterClient() {
                   >
                     Generate
                   </button>{" "}
-                  to refresh
+                  to rewrite from scratch
                 </p>
               )}
             </div>

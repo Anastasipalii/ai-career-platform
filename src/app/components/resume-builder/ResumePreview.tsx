@@ -5,11 +5,23 @@ import {
   FontOption,
   SpacingOption,
 } from "@/app/components/resume-builder/types";
+import { isResumeEmpty } from "@/lib/resume/importResume";
+import { safeHref, displayUrl } from "@/lib/resume/urlSafety";
+import {
+  meaningfulProjects,
+  meaningfulCertifications,
+  meaningfulLinks,
+  visibleCustomSections,
+} from "@/lib/resume/resumeDocModel";
 
 interface ResumePreviewProps {
   formData: ResumeFormData;
   settings: CustomizationSettings;
   isRTL?: boolean;
+  /** DOM id for the rendered document node. Defaults to the builder's
+   *  "resume-document" (which the PDF export reads); the read-only View modal
+   *  passes a different id so the two instances never share an id. */
+  domId?: string;
 }
 
 /* ─── Theme lookup ─── */
@@ -72,6 +84,139 @@ function SectionHeading({ label, color }: { label: string; color: string }) {
         {label}
       </div>
     </div>
+  );
+}
+
+/* ─── Projects & Certifications (shared across all layouts; hidden when empty) ─── */
+function ProjectsBlock({ formData, theme, sp, fs }: {
+  formData: ResumeFormData; theme: ThemeColors; sp: SpacingValues; fs: string;
+}) {
+  const items = meaningfulProjects(formData);
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <SectionHeading label="Projects" color={theme.primary} />
+      <div style={{ display: "flex", flexDirection: "column" as const, gap: sp.itemGap }}>
+        {items.map((p) => {
+          const end = p.current ? "Present" : p.endDate;
+          const dates = [p.startDate, end].filter(Boolean).join(" – ");
+          return (
+            <div key={p.id}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <div>
+                  <span style={{ fontWeight: 600, fontSize: fs, color: "#111827" }}>{or(p.name, "Project")}</span>
+                  {p.role && <span style={{ fontSize: fs, color: theme.primary }}> · {p.role}</span>}
+                </div>
+                {dates && (
+                  <span style={{ fontSize: "9px", color: "#9ca3af", whiteSpace: "nowrap" as const, marginLeft: "6px" }}>{dates}</span>
+                )}
+              </div>
+              {p.url && <div style={{ fontSize: "9px", color: theme.primary, wordBreak: "break-all" as const }}>{p.url}</div>}
+              {p.description.split("\n").filter(Boolean).map((line, i) => (
+                <div key={i} style={{ fontSize: "9.5px", color: "#4b5563", lineHeight: 1.55 }}>· {line}</div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CertificationsBlock({ formData, theme, fs }: {
+  formData: ResumeFormData; theme: ThemeColors; fs: string;
+}) {
+  const items = meaningfulCertifications(formData);
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <SectionHeading label="Certifications" color={theme.primary} />
+      {items.map((c) => {
+        const dates = [c.issueDate, c.expirationDate].filter(Boolean).join(" – ");
+        const meta = [c.issuer, c.credentialId && `ID ${c.credentialId}`].filter(Boolean).join(" · ");
+        return (
+          <div key={c.id} style={{ marginBottom: "4px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span style={{ fontWeight: 600, fontSize: fs, color: "#111827" }}>{or(c.name, "Certification")}</span>
+              {dates && (
+                <span style={{ fontSize: "9px", color: "#9ca3af", whiteSpace: "nowrap" as const, marginLeft: "6px" }}>{dates}</span>
+              )}
+            </div>
+            {meta && <div style={{ fontSize: "9.5px", color: "#4b5563" }}>{meta}</div>}
+            {c.credentialUrl && <div style={{ fontSize: "9px", color: theme.primary, wordBreak: "break-all" as const }}>{c.credentialUrl}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProfessionalLinksBlock({ formData, theme }: {
+  formData: ResumeFormData; theme: ThemeColors;
+}) {
+  const items = meaningfulLinks(formData);
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <SectionHeading label="Links" color={theme.primary} />
+      <div style={{ display: "flex", flexDirection: "column" as const, gap: "2px" }}>
+        {items.map((l) => {
+          const href = safeHref(l.url);
+          const label = l.label.trim();
+          const shown = displayUrl(l.url);
+          return (
+            <div key={l.id} style={{ fontSize: "9.5px", color: "#374151", wordBreak: "break-all" as const }}>
+              {label && <span style={{ fontWeight: 600, color: "#111827" }}>{label}: </span>}
+              {href ? (
+                <a href={href} target="_blank" rel="noopener noreferrer nofollow" style={{ color: theme.primary, textDecoration: "none" }}>{shown}</a>
+              ) : (
+                <span>{shown}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CustomSectionsBlock({ formData, theme, sp, fs }: {
+  formData: ResumeFormData; theme: ThemeColors; sp: SpacingValues; fs: string;
+}) {
+  const sections = visibleCustomSections(formData);
+  if (sections.length === 0) return null;
+  return (
+    <>
+      {sections.map((sec) => (
+        <div key={sec.id}>
+          <SectionHeading label={sec.title.trim() || "Section"} color={theme.primary} />
+          <div style={{ display: "flex", flexDirection: "column" as const, gap: sp.itemGap }}>
+            {sec.items.map((i) => {
+              const href = safeHref(i.url);
+              return (
+                <div key={i.id}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <div>
+                      {i.heading.trim() && <span style={{ fontWeight: 600, fontSize: fs, color: "#111827" }}>{i.heading}</span>}
+                      {i.subheading.trim() && <span style={{ fontSize: fs, color: theme.primary }}> · {i.subheading}</span>}
+                    </div>
+                    {i.date.trim() && (
+                      <span style={{ fontSize: "9px", color: "#9ca3af", whiteSpace: "nowrap" as const, marginLeft: "6px" }}>{i.date}</span>
+                    )}
+                  </div>
+                  {href
+                    ? <a href={href} target="_blank" rel="noopener noreferrer nofollow" style={{ fontSize: "9px", color: theme.primary, textDecoration: "none", wordBreak: "break-all" as const }}>{displayUrl(i.url)}</a>
+                    : (i.url.trim() && <div style={{ fontSize: "9px", color: "#6b7280", wordBreak: "break-all" as const }}>{displayUrl(i.url)}</div>)}
+                  {i.description.split("\n").filter(Boolean).map((line, k) => (
+                    <div key={k} style={{ fontSize: "9.5px", color: "#4b5563", lineHeight: 1.55 }}>· {line}</div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -214,6 +359,11 @@ function OneColumn({ formData, theme, sp, fs }: {
           </div>
         )}
 
+        <ProjectsBlock formData={formData} theme={theme} sp={sp} fs={fs} />
+        <CertificationsBlock formData={formData} theme={theme} fs={fs} />
+        <ProfessionalLinksBlock formData={formData} theme={theme} />
+        <CustomSectionsBlock formData={formData} theme={theme} sp={sp} fs={fs} />
+
         {(formData.skills.length > 0 || formData.languages.length > 0) && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
             {formData.skills.length > 0 && (
@@ -301,6 +451,7 @@ function TwoColumn({ formData, theme, sp, fs }: {
               ))}
             </div>
           )}
+          <ProjectsBlock formData={formData} theme={theme} sp={sp} fs={fs} />
         </div>
 
         {/* Right — sidebar */}
@@ -335,6 +486,9 @@ function TwoColumn({ formData, theme, sp, fs }: {
               ))}
             </div>
           )}
+          <CertificationsBlock formData={formData} theme={theme} fs={fs} />
+        <ProfessionalLinksBlock formData={formData} theme={theme} />
+        <CustomSectionsBlock formData={formData} theme={theme} sp={sp} fs={fs} />
         </div>
       </div>
     </div>
@@ -435,6 +589,10 @@ function SidebarLayout({ formData, theme, sp, fs }: {
             ))}
           </div>
         )}
+        <ProjectsBlock formData={formData} theme={theme} sp={sp} fs={fs} />
+        <CertificationsBlock formData={formData} theme={theme} fs={fs} />
+        <ProfessionalLinksBlock formData={formData} theme={theme} />
+        <CustomSectionsBlock formData={formData} theme={theme} sp={sp} fs={fs} />
       </div>
     </div>
   );
@@ -515,6 +673,11 @@ function ModernCard({ formData, theme, sp, fs }: {
           </div>
         )}
 
+        <ProjectsBlock formData={formData} theme={theme} sp={sp} fs={fs} />
+        <CertificationsBlock formData={formData} theme={theme} fs={fs} />
+        <ProfessionalLinksBlock formData={formData} theme={theme} />
+        <CustomSectionsBlock formData={formData} theme={theme} sp={sp} fs={fs} />
+
         {(formData.education.length > 0 || formData.languages.length > 0) && (
           <div style={{ display: "grid", gridTemplateColumns: formData.languages.length > 0 ? "1fr 1fr" : "1fr", gap: "8px" }}>
             {formData.education.length > 0 && (
@@ -549,12 +712,13 @@ function ModernCard({ formData, theme, sp, fs }: {
 const ARABIC_FONT = "'Noto Sans Arabic', 'Arabic UI Text', 'Segoe UI', Arial, sans-serif";
 
 /* ─── Main export ─── */
-export default function ResumePreview({ formData, settings, isRTL = false }: ResumePreviewProps) {
+export default function ResumePreview({ formData, settings, isRTL = false, domId = "resume-document" }: ResumePreviewProps) {
   const theme = THEME_COLORS[settings.colorTheme];
   const sp = SPACING[settings.spacing];
   const fs = sp.fontSize;
   const sharedProps = { formData, theme, sp, fs };
   const fontFamily = isRTL ? ARABIC_FONT : FONT_STACKS[settings.font];
+  const isEmpty = isResumeEmpty(formData);
 
   return (
     <div
@@ -598,7 +762,7 @@ export default function ResumePreview({ formData, settings, isRTL = false }: Res
       {/* Resume document */}
       <div style={{ background: "#e5e7eb", padding: "12px", maxHeight: "480px", overflowY: "auto" }}>
         <div
-          id="resume-document"
+          id={domId}
           dir={isRTL ? "rtl" : "ltr"}
           style={{
             background: "#ffffff",
@@ -610,10 +774,21 @@ export default function ResumePreview({ formData, settings, isRTL = false }: Res
             transition: "box-shadow 0.2s ease",
           }}
         >
-          {settings.layout === "One-column"  && <OneColumn      {...sharedProps} />}
-          {settings.layout === "Two-column"  && <TwoColumn      {...sharedProps} />}
-          {settings.layout === "Sidebar"     && <SidebarLayout  {...sharedProps} />}
-          {settings.layout === "Modern card" && <ModernCard     {...sharedProps} />}
+          {isEmpty ? (
+            <div style={{ padding: "56px 24px", textAlign: "center", color: "#6b7280", fontFamily }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#4b5563" }}>Your resume preview</div>
+              <div style={{ fontSize: "12px", marginTop: "6px", color: "#9ca3af" }}>
+                Fill in the form or import an existing résumé to see it here.
+              </div>
+            </div>
+          ) : (
+            <>
+              {settings.layout === "One-column"  && <OneColumn      {...sharedProps} />}
+              {settings.layout === "Two-column"  && <TwoColumn      {...sharedProps} />}
+              {settings.layout === "Sidebar"     && <SidebarLayout  {...sharedProps} />}
+              {settings.layout === "Modern card" && <ModernCard     {...sharedProps} />}
+            </>
+          )}
         </div>
       </div>
     </div>

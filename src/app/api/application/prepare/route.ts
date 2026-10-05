@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest, NextResponse } from "next/server";
 import { withRetryOn429 } from "@/lib/openaiRetry";
 import { prepareApplicationPackage } from "@/lib/application/prepare";
@@ -17,7 +18,8 @@ import type { ApplicationDraft, ApplicationPackage } from "@/lib/application/typ
 // text, no secrets.
 // ============================================================================
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   let draft: ApplicationDraft | null = null;
   try {
     draft = (await req.json()) as ApplicationDraft;
@@ -86,4 +88,5 @@ export async function POST(req: NextRequest) {
     // Any AI failure → deterministic fallback (the app still works).
     return NextResponse.json({ package: base, source: "deterministic" });
   }
+  });
 }

@@ -9,12 +9,17 @@ export const metadata: Metadata = {
     "Practice job interviews with AI-powered questions, structured feedback, and role-specific preparation. Available in 10 languages.",
 };
 
-export default function InterviewCoachPage() {
+interface PageProps {
+  searchParams: Promise<{ id?: string }>;
+}
+
+export default async function InterviewCoachPage({ searchParams }: PageProps) {
+  const { id } = await searchParams;
   return (
     <>
       <Navbar />
       <main className="pt-16">
-        <InterviewClient />
+        <InterviewClient initialSessionId={id} />
       </main>
       <Footer />
     </>

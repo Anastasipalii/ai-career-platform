@@ -9,12 +9,17 @@ export const metadata: Metadata = {
     "Create personalized, professional cover letters tailored to each job application in seconds. Supports 16+ languages and multiple tone styles.",
 };
 
-export default function CoverLetterPage() {
+interface PageProps {
+  searchParams: Promise<{ id?: string }>;
+}
+
+export default async function CoverLetterPage({ searchParams }: PageProps) {
+  const { id } = await searchParams;
   return (
     <>
       <Navbar />
       <main className="pt-16">
-        <CoverLetterClient />
+        <CoverLetterClient initialLetterId={id} />
       </main>
       <Footer />
     </>

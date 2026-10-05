@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest, NextResponse } from "next/server";
 import { withRetryOn429 } from "@/lib/openaiRetry";
 import { analyzeResumeLocally } from "@/lib/localResumeFallback";
@@ -55,7 +56,8 @@ const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 const json = (source: Source, data: ResumeAnalysis, status = 200) =>
   NextResponse.json({ source, data }, { status });
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   let body: AnalyzeBody;
   try {
     body = (await req.json()) as AnalyzeBody;
@@ -167,4 +169,5 @@ Return JSON with EXACTLY this shape (values MUST reflect the actual resume, what
     const is429 = /\b429\b|rate limit|quota|too many requests/i.test(msg);
     return localFallback(is429 ? "429 (rate limit / quota)" : `error: ${msg}`);
   }
+  });
 }

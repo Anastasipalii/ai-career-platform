@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { authedFetch } from "@/lib/auth/authedFetch";
 import Link from "next/link";
 import {
   ShieldCheck, XCircle, CheckCircle2, Loader2, ExternalLink, Play, ArrowLeft, FlaskConical, Download, FileText,
 } from "lucide-react";
 import { readApplicationDraft } from "@/lib/application/applicationDraft";
+import { safeHref } from "@/lib/resume/urlSafety";
 import { evaluateReadiness, prepareApplicationPackage } from "@/lib/application/prepare";
 import { runDryRun } from "@/lib/application/dryRun";
 import {
@@ -66,7 +68,7 @@ export default function ApplyPreviewClient() {
     let active = true;
     (async () => {
       try {
-        const res = await fetch("/api/application/prepare", {
+        const res = await authedFetch("/api/application/prepare", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(draft),
@@ -296,8 +298,8 @@ export default function ApplyPreviewClient() {
             <Link href="/dashboard" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-200 border border-white/10 hover:bg-white/[0.04]">
               <ArrowLeft size={15} /> Back to Dashboard
             </Link>
-            {job.sourceUrl && (
-              <a href={job.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-200 border border-white/10 hover:bg-white/[0.04]">
+            {safeHref(job.sourceUrl ?? "") && (
+              <a href={safeHref(job.sourceUrl ?? "")!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-200 border border-white/10 hover:bg-white/[0.04]">
                 <ExternalLink size={15} /> View original vacancy
               </a>
             )}
@@ -329,8 +331,8 @@ export default function ApplyPreviewClient() {
               <Row
                 label="External job URL"
                 value={
-                  job.sourceUrl ? (
-                    <a href={job.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-300 hover:underline break-all">{job.sourceUrl}</a>
+                  safeHref(job.sourceUrl ?? "") ? (
+                    <a href={safeHref(job.sourceUrl ?? "")!} target="_blank" rel="noopener noreferrer" className="text-cyan-300 hover:underline break-all">{job.sourceUrl}</a>
                   ) : "—"
                 }
               />
@@ -402,8 +404,8 @@ export default function ApplyPreviewClient() {
               <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-white">
                 <ArrowLeft size={13} /> Dashboard
               </Link>
-              {job.sourceUrl && (
-                <a href={job.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-cyan-300 hover:underline ml-auto">
+              {safeHref(job.sourceUrl ?? "") && (
+                <a href={safeHref(job.sourceUrl ?? "")!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-cyan-300 hover:underline ml-auto">
                   <ExternalLink size={13} /> View original vacancy
                 </a>
               )}

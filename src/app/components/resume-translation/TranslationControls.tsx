@@ -4,7 +4,6 @@ import {
   TranslationLanguage,
   TranslationFormState,
   TRANSLATION_LANGUAGES,
-  TRANSLATION_OPTIONS,
 } from "@/app/components/resume-translation/types";
 
 interface TranslationControlsProps {
@@ -13,6 +12,7 @@ interface TranslationControlsProps {
   onTranslate:  () => void;
   isTranslating: boolean;
   translated:   boolean;
+  canTranslate: boolean;
 }
 
 const selectCls =
@@ -25,6 +25,7 @@ export default function TranslationControls({
   onTranslate,
   isTranslating,
   translated,
+  canTranslate,
 }: TranslationControlsProps) {
   const set = <K extends keyof TranslationFormState>(key: K, value: TranslationFormState[K]) =>
     onChange({ ...state, [key]: value });
@@ -32,14 +33,8 @@ export default function TranslationControls({
   const swapLanguages = () =>
     onChange({ ...state, sourceLanguage: state.targetLanguage, targetLanguage: state.sourceLanguage });
 
-  const toggleOption = (id: string) => {
-    const next = state.enabledOptions.includes(id)
-      ? state.enabledOptions.filter((o) => o !== id)
-      : [...state.enabledOptions, id];
-    set("enabledOptions", next);
-  };
-
   const sameLanguage = state.sourceLanguage === state.targetLanguage;
+  const disabled = isTranslating || sameLanguage || !canTranslate;
 
   return (
     <div
@@ -118,60 +113,22 @@ export default function TranslationControls({
         )}
       </div>
 
-      {/* Translation options (3 only) */}
-      <div>
-        <label className="block text-sm font-medium text-slate-300 mb-3">Options</label>
-        <div className="flex flex-col gap-2">
-          {TRANSLATION_OPTIONS.map((opt) => {
-            const active = state.enabledOptions.includes(opt.id);
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => toggleOption(opt.id)}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-xl border text-left transition-all duration-200 hover:border-white/15"
-                style={
-                  active
-                    ? { background: "rgba(16,185,129,0.07)", borderColor: "rgba(16,185,129,0.28)" }
-                    : { background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }
-                }
-              >
-                <div
-                  className="w-4 h-4 rounded flex items-center justify-center shrink-0 transition-all duration-200"
-                  style={{
-                    background: active ? "#10b981" : "rgba(255,255,255,0.05)",
-                    border:     active ? "1px solid #10b981" : "1px solid rgba(255,255,255,0.12)",
-                  }}
-                >
-                  {active && (
-                    <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-                      <path d="M1.5 4.5l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium" style={{ color: active ? "#f1f5f9" : "rgba(255,255,255,0.55)" }}>
-                    {opt.label}
-                  </span>
-                  <span className="text-xs text-slate-600 ml-2">{opt.description}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* Faithful-translation note (truthful; replaces the old cosmetic toggles) */}
+      <p className="text-xs text-slate-500 leading-relaxed">
+        CareerAI translates your résumé <span className="text-slate-400">text</span> faithfully — it preserves your facts, numbers, dates and section structure, and never rewrites or embellishes. The original PDF/DOCX visual layout is not reproduced.
+      </p>
 
       {/* Translate button */}
       <button
         type="button"
         onClick={onTranslate}
-        disabled={isTranslating || sameLanguage}
+        disabled={disabled}
         className="w-full flex items-center justify-center gap-2.5 py-4 rounded-2xl font-semibold text-base text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
         style={{
           background:   translated
             ? "linear-gradient(135deg, #059669, #34d399)"
             : "linear-gradient(135deg, #059669, #7c3aed)",
-          boxShadow:    isTranslating || sameLanguage ? "none" : "0 0 36px rgba(5,150,105,0.3)",
+          boxShadow:    disabled ? "none" : "0 0 36px rgba(5,150,105,0.3)",
         }}
       >
         {isTranslating ? (
@@ -186,7 +143,7 @@ export default function TranslationControls({
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path d="M3 9l4 4 8-8" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            Translation complete — translate again?
+            Translate again
           </>
         ) : (
           <>
@@ -199,6 +156,9 @@ export default function TranslationControls({
           </>
         )}
       </button>
+      {!canTranslate && !sameLanguage && (
+        <p className="text-xs text-slate-600 text-center -mt-2">Add your résumé text above to translate.</p>
+      )}
     </div>
   );
 }

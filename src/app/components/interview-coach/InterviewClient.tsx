@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { authedFetch } from "@/lib/auth/authedFetch";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
@@ -18,9 +19,20 @@ import {
 import Toast from "@/app/components/ui/Toast";
 import InterviewHero from "@/app/components/interview-coach/InterviewHero";
 import FeedbackPanel from "@/app/components/interview-coach/FeedbackPanel";
+import { aggregateScore, buildSessionFeedback, type StoredAnswer, type StoredFeedback } from "@/lib/interview/session";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type Phase = "setup" | "active" | "complete";
+type Phase = "setup" | "active" | "complete" | "review";
+
+interface ReviewData {
+  id: string;
+  jobTitle: string;
+  interviewType: string;
+  language: string;
+  score: number | null;
+  createdAt: string;
+  answers: StoredAnswer[];
+}
 
 // ── Mode config ───────────────────────────────────────────────────────────────
 const MODE_ICONS: Record<InterviewMode, React.ReactNode> = {
@@ -80,14 +92,17 @@ function categoryColor(cat: string): string {
   return map[cat] ?? "#94a3b8";
 }
 
+interface InterviewClientProps {
+  /** When present, open a saved session in read-only review mode (owner-scoped). */
+  initialSessionId?: string;
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
-export default function InterviewClient() {
+export default function InterviewClient({ initialSessionId }: InterviewClientProps) {
   const router = useRouter();
 
-  // Phase
-  const [phase, setPhase] = useState<Phase>("setup");
+  const [phase, setPhase] = useState<Phase>(initialSessionId ? "review" : "setup");
 
-  // Setup state
   const [setup, setSetup] = useState<SimpleSetupData>({
     jobDescription: "",
     jobTitle:       "",
@@ -95,23 +110,84 @@ export default function InterviewClient() {
     language:       "English (US)",
   });
 
-  // Session state
   const [questions, setQuestions]       = useState<AIQuestion[]>([]);
   const [currentIdx, setCurrentIdx]     = useState(0);
   const [typedAnswer, setTypedAnswer]   = useState("");
   const [feedback, setFeedback]         = useState<FeedbackData | null>(null);
   const [sessionAnswers, setSessionAnswers] = useState<SessionAnswer[]>([]);
 
-  // Loading + error
   const [isGenerating, setIsGenerating]     = useState(false);
   const [isGettingFeedback, setIsGettingFeedback] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // Review (read-only saved session) state.
+  const [review, setReview] = useState<ReviewData | null>(null);
+  const [reviewLoading, setReviewLoading] = useState<boolean>(!!initialSessionId);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Guards against duplicate session inserts from repeated Finish actions.
+  const savedRef = useRef(false);
+
   const showToast = useCallback((message: string, type: "success" | "error") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   }, []);
+
+  // ── Review: load a saved session read-only (owner-scoped, NO AI call) ────────
+  useEffect(() => {
+    if (!initialSessionId) return;
+    let cancelled = false;
+    (async () => {
+      setReviewLoading(true);
+      setReviewError(null);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push("/login"); return; }
+      const { data, error } = await supabase
+        .from("interview_sessions")
+        .select("id, job_title, interview_type, language, score, feedback, created_at")
+        .eq("id", initialSessionId)
+        .eq("user_id", session.user.id) // defensive; RLS already restricts to owner
+        .single();
+      if (cancelled) return;
+      if (error || !data) {
+        setReviewError("Couldn't open that interview session.");
+        setReviewLoading(false);
+        return;
+      }
+      const row = data as {
+        id: string; job_title: string | null; interview_type: string;
+        language: string; score: number | null; feedback: unknown; created_at: string;
+      };
+      const fb = (row.feedback ?? {}) as StoredFeedback;
+      const answers: StoredAnswer[] = Array.isArray(fb.answers)
+        ? fb.answers.map((a) => ({
+            question: typeof a?.question === "string" ? a.question : "",
+            answer:   typeof a?.answer === "string" ? a.answer : "",
+            // Back-compat: older rows had no `scored` flag — infer from presence of scores.
+            scored:   typeof a?.scored === "boolean" ? a.scored : !!a?.scores,
+            scores:   a?.scores,
+            improvedAnswer: a?.improvedAnswer,
+            strengths: a?.strengths,
+            mistakes: a?.mistakes,
+            keywords: a?.keywords,
+          }))
+        : [];
+      setReview({
+        id: row.id,
+        jobTitle: row.job_title ?? "",
+        interviewType: row.interview_type,
+        language: row.language,
+        score: row.score,
+        createdAt: row.created_at,
+        answers,
+      });
+      setReviewLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [initialSessionId, router]);
 
   // ── Start interview ─────────────────────────────────────────────────────────
   const handleStart = async () => {
@@ -124,7 +200,7 @@ export default function InterviewClient() {
     setAiError(null);
 
     try {
-      const res = await fetch("/api/interview/generate", {
+      const res = await authedFetch("/api/interview/generate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify(setup),
@@ -133,7 +209,8 @@ export default function InterviewClient() {
       const data = await res.json() as { questions?: AIQuestion[]; error?: string };
 
       if (!res.ok || data.error) {
-        setAiError(data.error ?? "Failed to generate questions.");
+        // Truthful retryable error — we never fabricate local questions.
+        setAiError(data.error ?? "We couldn't generate questions right now. Please try again.");
         return;
       }
 
@@ -142,9 +219,10 @@ export default function InterviewClient() {
       setTypedAnswer("");
       setFeedback(null);
       setSessionAnswers([]);
+      savedRef.current = false;
       setPhase("active");
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : "Connection failed. Please try again.");
+    } catch {
+      setAiError("Connection failed. Please try again.");
     } finally {
       setIsGenerating(false);
     }
@@ -165,7 +243,7 @@ export default function InterviewClient() {
     setAiError(null);
 
     try {
-      const res = await fetch("/api/interview/feedback", {
+      const res = await authedFetch("/api/interview/feedback", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
@@ -181,31 +259,25 @@ export default function InterviewClient() {
       const data = await res.json() as FeedbackData & { error?: string };
 
       if (!res.ok || data.error) {
-        // Graceful AI quota error
-        if (res.status === 429 || data.error?.toLowerCase().includes("quota") || data.error?.toLowerCase().includes("billing")) {
-          setAiError("AI generation is unavailable right now. Please check OpenAI billing or try again later.");
-        } else {
-          setAiError(data.error ?? "Feedback generation failed.");
-        }
+        // Truthful error; the user can retry OR skip without being trapped.
+        setAiError(data.error ?? "Feedback is unavailable right now — you can try again or continue without a score.");
         return;
       }
 
       setFeedback(data);
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : "Feedback failed. Please try again.");
+    } catch {
+      setAiError("Feedback failed. You can try again or continue without a score.");
     } finally {
       setIsGettingFeedback(false);
     }
   };
 
-  // ── Next question ───────────────────────────────────────────────────────────
-  const handleNext = () => {
+  // ── Advance (with an AI score, or skipped/unscored) ──────────────────────────
+  const advance = (fb: FeedbackData | null) => {
     const question = questions[currentIdx];
-    if (!question || !feedback) return;
+    if (!question) return;
 
-    // Save this answer + feedback
-    const newAnswer: SessionAnswer = { question, answer: typedAnswer, feedback };
-    const updated = [...sessionAnswers, newAnswer];
+    const updated = [...sessionAnswers, { question, answer: typedAnswer, feedback: fb } as SessionAnswer];
     setSessionAnswers(updated);
 
     if (currentIdx < questions.length - 1) {
@@ -214,36 +286,35 @@ export default function InterviewClient() {
       setFeedback(null);
       setAiError(null);
     } else {
-      // Last question — go to complete
       setPhase("complete");
-      saveSession(updated);
+      void saveSession(updated);
     }
   };
 
-  // ── Save session ────────────────────────────────────────────────────────────
+  const handleNext = () => advance(feedback);
+  const handleSkip = () => advance(null); // continue without a score — never fabricated
+
+  // ── Save session (resilient; dedup-guarded) ──────────────────────────────────
   const saveSession = async (answers: SessionAnswer[]) => {
+    if (savedRef.current) return; // never double-insert on repeated Finish
+    savedRef.current = true;
+
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    const scores = answers.map(a => Math.round((a.feedback.clarity + a.feedback.confidence + a.feedback.structure) / 3));
-    const avgScore = scores.length > 0 ? Math.round(scores.reduce((s, n) => s + n, 0) / scores.length) : 0;
-
-    await supabase.from("interview_sessions").insert({
+    const avg = aggregateScore(answers); // null when nothing was scored
+    const { error } = await supabase.from("interview_sessions").insert({
       user_id:       session.user.id,
       job_title:     setup.jobTitle || "Unknown Role",
       interview_type: MODE_LABELS[setup.mode],
       language:      setup.language,
-      score:         avgScore,
-      feedback: {
-        answers: answers.map(a => ({
-          question: a.question.question,
-          answer:   a.answer,
-          scores:   { clarity: a.feedback.clarity, confidence: a.feedback.confidence, structure: a.feedback.structure },
-        })),
-        avgScore,
-        mode: setup.mode,
-      },
+      score:         avg, // null (not 0) when no answer was genuinely scored
+      feedback:      buildSessionFeedback(answers, setup.mode),
     });
+    if (error) {
+      savedRef.current = false; // allow a retry path if the insert failed
+      showToast("Couldn't save this session.", "error");
+    }
   };
 
   const handleReset = () => {
@@ -254,15 +325,34 @@ export default function InterviewClient() {
     setFeedback(null);
     setSessionAnswers([]);
     setAiError(null);
+    savedRef.current = false;
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Delete a saved session (owner-scoped, confirmed) ─────────────────────────
+  const handleDeleteSession = async () => {
+    if (!review) return;
+    setIsDeleting(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.push("/login"); return; }
+    const { error } = await supabase
+      .from("interview_sessions")
+      .delete()
+      .eq("id", review.id)
+      .eq("user_id", session.user.id);
+    setIsDeleting(false);
+    if (error) {
+      showToast("Couldn't delete this session.", "error");
+      return;
+    }
+    showToast("Interview session deleted.", "success");
+    router.push("/dashboard");
+  };
+
+  // ── Render helpers ──────────────────────────────────────────────────────────
   const currentQuestion = questions[currentIdx];
   const totalQ = questions.length;
   const completedQ = sessionAnswers.length;
-  const avgScore = sessionAnswers.length > 0
-    ? Math.round(sessionAnswers.reduce((s, a) => s + Math.round((a.feedback.clarity + a.feedback.confidence + a.feedback.structure) / 3), 0) / sessionAnswers.length)
-    : 0;
+  const liveAvg = aggregateScore(sessionAnswers);
 
   return (
     <>
@@ -271,7 +361,6 @@ export default function InterviewClient() {
       <InterviewHero />
       <div className="section-divider" />
 
-      {/* ── Main section ── */}
       <section id="coach" className="py-16 relative">
         <div
           className="absolute top-0 left-0 w-[500px] h-[500px] rounded-full pointer-events-none"
@@ -282,28 +371,134 @@ export default function InterviewClient() {
           <div className="flex items-center gap-3 mb-10">
             <div className="section-divider flex-1" />
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wide px-3">
-              Interview coach
+              {phase === "review" ? "Saved interview session" : "Interview coach"}
             </span>
             <div className="section-divider flex-1" />
           </div>
 
+          {/* ──────────── PHASE: REVIEW (read-only saved session) ──────────── */}
+          {phase === "review" && (
+            <div className="max-w-2xl mx-auto flex flex-col gap-5">
+              {reviewLoading ? (
+                <div className="flex items-center justify-center gap-3 py-16 text-slate-400 text-sm">
+                  <Spinner size={18} color="#f59e0b" /> Loading your saved session…
+                </div>
+              ) : reviewError ? (
+                <div
+                  className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm"
+                  style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)", color: "#fca5a5" }}
+                >
+                  <span className="leading-relaxed">{reviewError}</span>
+                </div>
+              ) : review ? (
+                <>
+                  {/* Summary header */}
+                  <div className="rounded-2xl border overflow-hidden" style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}>
+                    <div className="px-6 py-5 border-b flex items-center justify-between gap-4" style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(245,158,11,0.04)" }}>
+                      <div className="min-w-0">
+                        <h2 className="text-base font-semibold text-white truncate">{review.interviewType}</h2>
+                        <p className="text-xs text-slate-500 mt-0.5 truncate">
+                          {review.jobTitle || "General"} · {review.language}
+                        </p>
+                      </div>
+                      {review.score !== null ? (
+                        <div className="flex flex-col items-center justify-center rounded-xl px-3 py-1.5 shrink-0" style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)" }}>
+                          <span className="text-lg font-bold leading-none" style={{ color: "#10b981" }}>{review.score}</span>
+                          <span className="text-[9px] font-medium mt-0.5" style={{ color: "#10b981", opacity: 0.7 }}>/100</span>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-500 shrink-0">Not scored</span>
+                      )}
+                    </div>
+
+                    <div className="p-6 flex flex-col gap-4">
+                      {review.answers.length === 0 ? (
+                        <p className="text-sm text-slate-500">No per-answer detail was stored for this session.</p>
+                      ) : (
+                        review.answers.map((a, i) => (
+                          <div key={i} className="rounded-xl p-4 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
+                            <p className="text-sm font-semibold text-white leading-snug mb-2">{a.question || `Question ${i + 1}`}</p>
+                            {a.answer && (
+                              <p className="text-xs text-slate-400 whitespace-pre-line mb-3">{a.answer}</p>
+                            )}
+                            {a.scored && a.scores ? (
+                              <div className="flex flex-col gap-2">
+                                <div className="flex gap-4 text-[11px] text-slate-400">
+                                  <span>Clarity <strong className="text-slate-200">{a.scores.clarity}</strong></span>
+                                  <span>Confidence <strong className="text-slate-200">{a.scores.confidence}</strong></span>
+                                  <span>Structure <strong className="text-slate-200">{a.scores.structure}</strong></span>
+                                </div>
+                                {a.improvedAnswer && (
+                                  <div className="text-xs text-slate-400 leading-relaxed">
+                                    <span className="text-slate-500 uppercase tracking-wide text-[10px]">Suggested improved answer</span>
+                                    <p className="mt-1">&ldquo;{a.improvedAnswer}&rdquo;</p>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: "rgba(148,163,184,0.12)", color: "#94a3b8", border: "1px solid rgba(148,163,184,0.25)" }}>
+                                Not scored
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-col gap-3">
+                    {confirmDelete ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(false)}
+                          className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all hover:border-white/20 hover:text-white"
+                          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDeleteSession}
+                          disabled={isDeleting}
+                          className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-60"
+                          style={{ background: "rgba(239,68,68,0.1)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.25)" }}
+                        >
+                          {isDeleting ? "Deleting…" : "Delete permanently"}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(true)}
+                        className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                        style={{ background: "rgba(239,68,68,0.06)", color: "#f87171", border: "1px solid rgba(239,68,68,0.18)" }}
+                      >
+                        Delete this session
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => router.push("/interview-coach")}
+                      className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90"
+                      style={{ background: "linear-gradient(135deg, #d97706, #7c3aed)" }}
+                    >
+                      Start a new practice session
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )}
+
           {/* ──────────── PHASE: SETUP ──────────── */}
           {phase === "setup" && (
             <div className="max-w-2xl mx-auto">
-              <div
-                className="rounded-2xl border overflow-hidden"
-                style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-              >
-                {/* Header */}
-                <div
-                  className="px-6 py-5 border-b"
-                  style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(245,158,11,0.04)" }}
-                >
+              <div className="rounded-2xl border overflow-hidden" style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}>
+                <div className="px-6 py-5 border-b" style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(245,158,11,0.04)" }}>
                   <div className="flex items-center gap-3">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.25)", color: "#f59e0b" }}
-                    >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.25)", color: "#f59e0b" }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="5" y="2" width="14" height="9" rx="3.5" />
                         <path d="M3 11a9 9 0 0018 0" /><line x1="12" y1="20" x2="12" y2="22" />
@@ -317,11 +512,8 @@ export default function InterviewClient() {
                 </div>
 
                 <div className="p-6 flex flex-col gap-6">
-                  {/* Job description */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Job Description or Vacancy URL
-                    </label>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Job Description or Vacancy URL</label>
                     <textarea
                       className={inputCls + " resize-none"}
                       rows={5}
@@ -331,7 +523,6 @@ export default function InterviewClient() {
                     />
                   </div>
 
-                  {/* Job title */}
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">
                       Job Title <span className="text-slate-600 font-normal">(optional)</span>
@@ -344,11 +535,8 @@ export default function InterviewClient() {
                     />
                   </div>
 
-                  {/* Interview mode */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-3">
-                      Interview Type
-                    </label>
+                    <label className="block text-sm font-medium text-slate-300 mb-3">Interview Type</label>
                     <div className="grid grid-cols-2 gap-3">
                       {(["quick", "hr", "technical", "full"] as InterviewMode[]).map((m) => {
                         const active = setup.mode === m;
@@ -359,29 +547,17 @@ export default function InterviewClient() {
                             type="button"
                             onClick={() => setSetup({ ...setup, mode: m })}
                             className="flex items-start gap-3 p-4 rounded-xl border text-left transition-all duration-200 hover:-translate-y-0.5"
-                            style={
-                              active
-                                ? { background: mc.bg, borderColor: mc.border, boxShadow: `0 0 16px ${mc.bg}` }
-                                : { background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }
-                            }
+                            style={active
+                              ? { background: mc.bg, borderColor: mc.border, boxShadow: `0 0 16px ${mc.bg}` }
+                              : { background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}
                           >
-                            <div
-                              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-                              style={{
-                                background: active ? mc.bg : "rgba(255,255,255,0.05)",
-                                color:      active ? mc.color : "#475569",
-                                border:     `1px solid ${active ? mc.border : "transparent"}`,
-                              }}
-                            >
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                              style={{ background: active ? mc.bg : "rgba(255,255,255,0.05)", color: active ? mc.color : "#475569", border: `1px solid ${active ? mc.border : "transparent"}` }}>
                               {MODE_ICONS[m]}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium" style={{ color: active ? mc.color : "rgba(255,255,255,0.7)" }}>
-                                {MODE_LABELS[m]}
-                              </p>
-                              <p className="text-xs text-slate-600 mt-0.5">
-                                {MODE_COUNTS[m]} questions · {MODE_DURATIONS[m]}
-                              </p>
+                              <p className="text-sm font-medium" style={{ color: active ? mc.color : "rgba(255,255,255,0.7)" }}>{MODE_LABELS[m]}</p>
+                              <p className="text-xs text-slate-600 mt-0.5">{MODE_COUNTS[m]} questions · {MODE_DURATIONS[m]}</p>
                             </div>
                           </button>
                         );
@@ -389,11 +565,8 @@ export default function InterviewClient() {
                     </div>
                   </div>
 
-                  {/* Language */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Interview Language
-                    </label>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Interview Language</label>
                     <div className="relative">
                       <select
                         className={inputCls + " appearance-none cursor-pointer pr-10"}
@@ -412,12 +585,8 @@ export default function InterviewClient() {
                     </div>
                   </div>
 
-                  {/* AI error banner */}
                   {aiError && (
-                    <div
-                      className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm"
-                      style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)", color: "#fca5a5" }}
-                    >
+                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)", color: "#fca5a5" }}>
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0 mt-px">
                         <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.25" />
                         <path d="M8 5v4M8 11v.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
@@ -426,16 +595,12 @@ export default function InterviewClient() {
                     </div>
                   )}
 
-                  {/* Start button */}
                   <button
                     type="button"
                     onClick={handleStart}
                     disabled={isGenerating}
                     className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-semibold text-base text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.01] disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
-                    style={{
-                      background:  "linear-gradient(135deg, #d97706, #7c3aed)",
-                      boxShadow:   isGenerating ? "none" : "0 0 40px rgba(217,119,6,0.3)",
-                    }}
+                    style={{ background: "linear-gradient(135deg, #d97706, #7c3aed)", boxShadow: isGenerating ? "none" : "0 0 40px rgba(217,119,6,0.3)" }}
                   >
                     {isGenerating ? (
                       <><Spinner size={18} color="white" />Generating questions…</>
@@ -456,80 +621,38 @@ export default function InterviewClient() {
           {/* ──────────── PHASE: ACTIVE ──────────── */}
           {phase === "active" && currentQuestion && (
             <div className="max-w-2xl mx-auto flex flex-col gap-5">
-              {/* Progress bar */}
-              <div
-                className="rounded-2xl px-5 py-4 border"
-                style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-              >
+              <div className="rounded-2xl px-5 py-4 border" style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2.5">
-                    <span
-                      className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide"
-                      style={{
-                        background: MODE_COLORS[setup.mode].bg,
-                        color:      MODE_COLORS[setup.mode].color,
-                        border:     `1px solid ${MODE_COLORS[setup.mode].border}`,
-                      }}
-                    >
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide"
+                      style={{ background: MODE_COLORS[setup.mode].bg, color: MODE_COLORS[setup.mode].color, border: `1px solid ${MODE_COLORS[setup.mode].border}` }}>
                       {MODE_LABELS[setup.mode]}
                     </span>
-                    {setup.jobTitle && (
-                      <span className="text-xs text-slate-500 truncate max-w-[200px]">{setup.jobTitle}</span>
-                    )}
+                    {setup.jobTitle && <span className="text-xs text-slate-500 truncate max-w-[200px]">{setup.jobTitle}</span>}
                   </div>
                   <span className="text-sm font-semibold text-slate-300">
-                    {currentIdx + 1}
-                    <span className="text-slate-600"> / {totalQ}</span>
+                    {currentIdx + 1}<span className="text-slate-600"> / {totalQ}</span>
                   </span>
                 </div>
                 <div className="h-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.06)" }}>
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${((currentIdx) / totalQ) * 100}%`,
-                      background: "linear-gradient(90deg, #d97706, #7c3aed)",
-                    }}
-                  />
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(currentIdx / totalQ) * 100}%`, background: "linear-gradient(90deg, #d97706, #7c3aed)" }} />
                 </div>
               </div>
 
-              {/* Question card */}
-              <div
-                className="rounded-2xl border overflow-hidden"
-                style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-              >
-                {/* Category + number */}
-                <div
-                  className="px-6 py-4 border-b flex items-center justify-between"
-                  style={{ borderColor: "rgba(255,255,255,0.07)" }}
-                >
-                  <span
-                    className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full"
-                    style={{
-                      background: `${categoryColor(currentQuestion.category)}18`,
-                      border:     `1px solid ${categoryColor(currentQuestion.category)}44`,
-                      color:      categoryColor(currentQuestion.category),
-                    }}
-                  >
+              <div className="rounded-2xl border overflow-hidden" style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}>
+                <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+                  <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full"
+                    style={{ background: `${categoryColor(currentQuestion.category)}18`, border: `1px solid ${categoryColor(currentQuestion.category)}44`, color: categoryColor(currentQuestion.category) }}>
                     {currentQuestion.category}
                   </span>
                   <span className="text-xs text-slate-600">Question {currentIdx + 1} of {totalQ}</span>
                 </div>
 
                 <div className="px-6 py-6 flex flex-col gap-5">
-                  {/* Question */}
-                  <p className="text-lg font-semibold text-white leading-snug">
-                    {currentQuestion.question}
-                  </p>
+                  <p className="text-lg font-semibold text-white leading-snug">{currentQuestion.question}</p>
 
-                  {/* Tip */}
-                  <div
-                    className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm text-slate-400 leading-relaxed"
-                    style={{
-                      background: `${categoryColor(currentQuestion.category)}08`,
-                      border:     `1px solid ${categoryColor(currentQuestion.category)}22`,
-                    }}
-                  >
+                  <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm text-slate-400 leading-relaxed"
+                    style={{ background: `${categoryColor(currentQuestion.category)}08`, border: `1px solid ${categoryColor(currentQuestion.category)}22` }}>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 mt-0.5" style={{ color: categoryColor(currentQuestion.category) }}>
                       <circle cx="7" cy="7" r="6.5" stroke="currentColor" strokeWidth="1.25" />
                       <path d="M7 4.5v3M7 9v.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
@@ -537,7 +660,6 @@ export default function InterviewClient() {
                     <span><strong style={{ color: categoryColor(currentQuestion.category) }}>Tip: </strong>{currentQuestion.tip}</span>
                   </div>
 
-                  {/* Answer textarea */}
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-2">Your Answer</label>
                     <textarea
@@ -551,12 +673,8 @@ export default function InterviewClient() {
                     <p className="text-xs text-slate-600 mt-1.5 text-right tabular-nums">{typedAnswer.length} chars</p>
                   </div>
 
-                  {/* AI error */}
                   {aiError && (
-                    <div
-                      className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm"
-                      style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)", color: "#fca5a5" }}
-                    >
+                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)", color: "#fca5a5" }}>
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0 mt-px">
                         <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.25" />
                         <path d="M8 5v4M8 11v.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
@@ -565,61 +683,55 @@ export default function InterviewClient() {
                     </div>
                   )}
 
-                  {/* Get feedback button */}
                   {!feedback && (
-                    <button
-                      type="button"
-                      onClick={handleGetFeedback}
-                      disabled={isGettingFeedback || !typedAnswer.trim()}
-                      className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm text-white transition-all duration-200 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{
-                        background:  "linear-gradient(135deg, #d97706, #7c3aed)",
-                        boxShadow:   isGettingFeedback || !typedAnswer.trim() ? "none" : "0 0 24px rgba(217,119,6,0.25)",
-                      }}
-                    >
-                      {isGettingFeedback ? (
-                        <><Spinner size={16} color="white" />Analysing your answer…</>
-                      ) : (
-                        <>
-                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                            <polygon points="7 1 8.7 4.8 13 5.3 10 8 10.9 12.3 7 10.2 3.1 12.3 4 8 1 5.3 5.3 4.8" />
-                          </svg>
-                          Get AI Feedback
-                        </>
-                      )}
-                    </button>
+                    <div className="flex flex-col gap-2.5">
+                      <button
+                        type="button"
+                        onClick={handleGetFeedback}
+                        disabled={isGettingFeedback || !typedAnswer.trim()}
+                        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm text-white transition-all duration-200 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ background: "linear-gradient(135deg, #d97706, #7c3aed)", boxShadow: isGettingFeedback || !typedAnswer.trim() ? "none" : "0 0 24px rgba(217,119,6,0.25)" }}
+                      >
+                        {isGettingFeedback ? (
+                          <><Spinner size={16} color="white" />Analysing your answer…</>
+                        ) : (
+                          <>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="7 1 8.7 4.8 13 5.3 10 8 10.9 12.3 7 10.2 3.1 12.3 4 8 1 5.3 5.3 4.8" />
+                            </svg>
+                            Get AI Feedback
+                          </>
+                        )}
+                      </button>
+                      {/* Resilient path: never trapped if feedback is unavailable. */}
+                      <button
+                        type="button"
+                        onClick={handleSkip}
+                        disabled={isGettingFeedback}
+                        className="w-full py-3 rounded-xl font-medium text-sm transition-all duration-200 hover:text-white hover:border-white/20 disabled:opacity-50"
+                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }}
+                      >
+                        {currentIdx < questions.length - 1 ? "Skip feedback & continue" : "Skip feedback & finish"}{" "}
+                        <span className="text-slate-600">(not scored)</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Feedback */}
               {feedback && currentQuestion && (
                 <div className="flex flex-col gap-4">
                   <FeedbackPanel data={feedback} questionText={currentQuestion.question} />
-
                   <button
                     type="button"
                     onClick={handleNext}
                     className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.01]"
-                    style={{
-                      background:  "linear-gradient(135deg, #d97706, #7c3aed)",
-                      boxShadow:   "0 0 24px rgba(217,119,6,0.25)",
-                    }}
+                    style={{ background: "linear-gradient(135deg, #d97706, #7c3aed)", boxShadow: "0 0 24px rgba(217,119,6,0.25)" }}
                   >
                     {currentIdx < questions.length - 1 ? (
-                      <>
-                        Next Question
-                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-                          <path d="M3 7.5h9M8 4l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </>
+                      <>Next Question<svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M3 7.5h9M8 4l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></>
                     ) : (
-                      <>
-                        Finish Interview
-                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-                          <path d="M2.5 7.5l4 4 6-7" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </>
+                      <>Finish Interview<svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2.5 7.5l4 4 6-7" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" /></svg></>
                     )}
                   </button>
                 </div>
@@ -630,71 +742,41 @@ export default function InterviewClient() {
           {/* ──────────── PHASE: COMPLETE ──────────── */}
           {phase === "complete" && (
             <div className="max-w-2xl mx-auto">
-              <div
-                className="rounded-2xl border overflow-hidden"
-                style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}
-              >
-                {/* Header */}
-                <div
-                  className="px-6 py-8 border-b text-center"
-                  style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(16,185,129,0.04)" }}
-                >
-                  <div
-                    className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-                    style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)" }}
-                  >
-                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 14l7 7L24 7" />
-                    </svg>
+              <div className="rounded-2xl border overflow-hidden" style={{ background: "rgba(13,13,22,0.6)", borderColor: "rgba(255,255,255,0.07)" }}>
+                <div className="px-6 py-8 border-b text-center" style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(16,185,129,0.04)" }}>
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)" }}>
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14l7 7L24 7" /></svg>
                   </div>
                   <h2 className="text-xl font-bold text-white mb-1">Interview Complete!</h2>
                   <p className="text-slate-400 text-sm">Great work — here&apos;s how you did</p>
                 </div>
 
-                {/* Stats */}
                 <div className="p-6">
                   <div className="grid grid-cols-3 gap-4 mb-6">
                     {[
-                      { label: "Avg Score", value: `${avgScore}`, unit: "/100", color: avgScore >= 80 ? "#10b981" : avgScore >= 60 ? "#f59e0b" : "#ef4444" },
-                      { label: "Questions", value: `${completedQ + 1}`, unit: `/${totalQ}`, color: "#7c3aed" },
+                      { label: "Avg Score", value: liveAvg === null ? "—" : `${liveAvg}`, unit: liveAvg === null ? "" : "/100", color: liveAvg === null ? "#64748b" : liveAvg >= 80 ? "#10b981" : liveAvg >= 60 ? "#f59e0b" : "#ef4444" },
+                      { label: "Scored", value: `${sessionAnswers.filter((a) => a.feedback !== null).length}`, unit: `/${completedQ}`, color: "#7c3aed" },
                       { label: "Mode", value: MODE_LABELS[setup.mode].split(" ")[0], unit: "", color: MODE_COLORS[setup.mode].color },
                     ].map((s) => (
-                      <div
-                        key={s.label}
-                        className="rounded-xl p-4 text-center border"
-                        style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
-                      >
-                        <div className="text-2xl font-bold" style={{ color: s.color }}>
-                          {s.value}<span className="text-sm font-normal text-slate-600">{s.unit}</span>
-                        </div>
+                      <div key={s.label} className="rounded-xl p-4 text-center border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
+                        <div className="text-2xl font-bold" style={{ color: s.color }}>{s.value}<span className="text-sm font-normal text-slate-600">{s.unit}</span></div>
                         <div className="text-xs text-slate-500 mt-1">{s.label}</div>
                       </div>
                     ))}
                   </div>
 
+                  {liveAvg === null && (
+                    <p className="text-xs text-slate-500 text-center mb-4">No answers were scored in this session — it was saved without a score.</p>
+                  )}
+
                   <div className="flex flex-col gap-3">
-                    <button
-                      type="button"
-                      onClick={handleReset}
-                      className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.01]"
-                      style={{
-                        background: "linear-gradient(135deg, #d97706, #7c3aed)",
-                        boxShadow:  "0 0 24px rgba(217,119,6,0.25)",
-                      }}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                        <path d="M13 3.5A6.5 6.5 0 102 9" />
-                        <path d="M2 5.5V9H5.5" />
-                      </svg>
+                    <button type="button" onClick={handleReset} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.01]"
+                      style={{ background: "linear-gradient(135deg, #d97706, #7c3aed)", boxShadow: "0 0 24px rgba(217,119,6,0.25)" }}>
+                      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M13 3.5A6.5 6.5 0 102 9" /><path d="M2 5.5V9H5.5" /></svg>
                       Practice Again
                     </button>
-
-                    <button
-                      type="button"
-                      onClick={() => router.push("/dashboard")}
-                      className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 hover:border-white/20 hover:text-white"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }}
-                    >
+                    <button type="button" onClick={() => router.push("/dashboard")} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 hover:border-white/20 hover:text-white"
+                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }}>
                       View in Dashboard
                     </button>
                   </div>
@@ -704,7 +786,6 @@ export default function InterviewClient() {
           )}
         </div>
       </section>
-
     </>
   );
 }

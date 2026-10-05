@@ -1,0 +1,49 @@
+name: CI
+
+# Pre-launch quality gate. Runs on every push and pull request.
+# Installs strictly from the committed lockfile, then runs the full automated
+# gate: tests, TypeScript, ESLint, and a real production build.
+#
+# No deployment, no production secrets, no Supabase/OpenAI connection. The
+# NEXT_PUBLIC_* values below are BUILD-TIME PLACEHOLDERS only: the browser
+# Supabase client is constructed at module load during `next build`, which needs
+# a well-formed URL + a non-empty anon-key string but makes NO network call at
+# build time. Real values are supplied by the deployment platform at runtime.
+# Server secrets (OPENAI_API_KEY, JOOBLE_API_KEY) are read inside request
+# handlers at runtime and are intentionally absent here.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key-build-time-only
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (from lockfile)
+        run: npm ci
+
+      - name: Tests
+        run: node --experimental-strip-types --import ./tests/register.mjs --test tests/*.test.ts
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npx eslint .
+
+      - name: Production build
+        run: npm run build

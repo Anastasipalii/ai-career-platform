@@ -8,6 +8,8 @@
 // network. Only safe for the current user's own browser.
 // ============================================================================
 
+import { writeScoped, readScoped, removeScoped } from "@/lib/security/clientStorage";
+
 export interface StoredResumeFile {
   name: string;
   type: string;
@@ -15,7 +17,9 @@ export interface StoredResumeFile {
   savedAt: string;
 }
 
-const KEY = "careerai:resume-file";
+/** LEGACY unscoped key (pre-Pass-B); retained for cleanup. New writes are
+ *  user-scoped via clientStorage ("resume-file"). */
+export const RESUME_FILE_LEGACY_KEY = "careerai:resume-file";
 const MAX_BYTES = 4 * 1024 * 1024; // don't blow the localStorage quota
 
 const hasStorage = (): boolean => typeof window !== "undefined" && !!window.localStorage;
@@ -44,28 +48,29 @@ export function base64ToBytes(b64: string): Uint8Array {
 }
 
 /** Save the raw uploaded file. Oversized files are skipped (fallback is used). */
-export function saveResumeFile(file: { name: string; type: string; bytes: Uint8Array }): void {
+export function saveResumeFile(file: { name: string; type: string; bytes: Uint8Array }, userId?: string | null): void {
   if (!hasStorage()) return;
   try {
     if (file.bytes.byteLength > MAX_BYTES) {
-      clearResumeFile();
+      clearResumeFile(userId);
       return;
     }
-    window.localStorage.setItem(
-      KEY,
-      JSON.stringify({ name: file.name, type: file.type, dataBase64: bytesToBase64(file.bytes), savedAt: new Date().toISOString() })
+    // Raw résumé bytes are sensitive → written ONLY under the owning user's
+    // scoped key, never the legacy global key.
+    writeScoped(
+      "resume-file",
+      { name: file.name, type: file.type, dataBase64: bytesToBase64(file.bytes), savedAt: new Date().toISOString() },
+      userId,
     );
   } catch {
     /* quota / serialization — silently skip; the generated-PDF fallback covers it */
   }
 }
 
-export function readResumeFile(): StoredResumeFile | null {
+export function readResumeFile(userId?: string | null): StoredResumeFile | null {
   if (!hasStorage()) return null;
   try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { name?: string; type?: string; dataBase64?: string; savedAt?: string };
+    const parsed = readScoped<{ name?: string; type?: string; dataBase64?: string; savedAt?: string }>("resume-file", userId);
     if (!parsed?.dataBase64) return null;
     return {
       name: parsed.name ?? "resume",
@@ -78,11 +83,7 @@ export function readResumeFile(): StoredResumeFile | null {
   }
 }
 
-export function clearResumeFile(): void {
+export function clearResumeFile(userId?: string | null): void {
   if (!hasStorage()) return;
-  try {
-    window.localStorage.removeItem(KEY);
-  } catch {
-    /* ignore */
-  }
+  removeScoped("resume-file", userId);
 }

@@ -1,4 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  setCurrentUserId,
+  getCurrentUserId,
+  clearCareerAISensitive,
+  purgeLegacyUnscopedSensitiveKeys,
+} from "@/lib/security/clientStorage";
 
 const supabaseUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -44,7 +50,22 @@ if (typeof window !== "undefined") {
   // protected route to /login. On public routes we simply let the cleared
   // session stand (unauthenticated state). Transient network failures keep the
   // session and never reach here, so a flaky connection won't bounce the user.
-  supabase.auth.onAuthStateChange((authEvent) => {
+  supabase.auth.onAuthStateChange((authEvent, session) => {
+    // Account-isolation: keep the storage helper's notion of "current user" in
+    // sync, and clear the PREVIOUS user's sensitive CareerAI browser state on
+    // sign-out or an in-place account switch (A → B). B then reads only its own
+    // (empty) scoped keys and can never inherit A's data.
+    const previousUserId = getCurrentUserId();
+    const nextUserId = session?.user?.id ?? null;
+    if (authEvent === "SIGNED_OUT") {
+      clearCareerAISensitive(previousUserId);
+      setCurrentUserId(null);
+    } else if (nextUserId) {
+      if (previousUserId && previousUserId !== nextUserId) {
+        clearCareerAISensitive(previousUserId);
+      }
+      setCurrentUserId(nextUserId);
+    }
     if (authEvent === "SIGNED_OUT" && window.location.pathname.startsWith("/dashboard")) {
       window.location.assign("/login");
     }
@@ -54,12 +75,17 @@ if (typeof window !== "undefined") {
   // Only non-transient errors trigger cleanup (which fires SIGNED_OUT above).
   supabase.auth
     .getSession()
-    .then(({ error }) => {
+    .then(({ data, error }) => {
       if (error && error.name !== "AuthRetryableFetchError") {
         supabase.auth.signOut({ scope: "local" }).catch(() => {
           /* best-effort local cleanup */
         });
+      } else {
+        setCurrentUserId(data.session?.user?.id ?? null);
       }
+      // One-time migration on every boot: delete LEGACY unscoped sensitive keys
+      // left by pre-Pass-B releases (ownership unprovable → never migrated).
+      purgeLegacyUnscopedSensitiveKeys();
     })
     .catch(() => {
       /* transient error — leave the persisted session intact */

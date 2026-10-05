@@ -23,16 +23,21 @@ export type LanguageOption =
   | "Arabic";
 
 export interface CoverLetterFormData {
-  // Visible in simplified form
+  // Job + style
   jobDescription: string;
   tone:           ToneOption;
   language:       LanguageOption;
-  // Advanced / legacy (hidden from main form)
+  // Real candidate identity — user-reviewed, prefilled from the résumé where
+  // confidently found. Never fabricated; blank when unknown.
   fullName:       string;
-  jobTitle:       string;
+  email:          string;
+  phone:          string;
+  location:       string;
+  jobTitle:       string; // target role the candidate is applying for
   company:        string;
-  resumeSummary:  string;
-  keySkills:      string;
+  // Extracted résumé text (parsed client-side) — the factual background sent to
+  // the generator. Raw file bytes never leave the browser.
+  resumeText:     string;
 }
 
 export const TONE_OPTIONS: ToneOption[] = [

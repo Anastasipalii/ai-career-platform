@@ -13,46 +13,7 @@
 import { useRef, useState } from "react";
 import { FileText, Upload, X } from "lucide-react";
 import { saveResumeFile, clearResumeFile } from "@/lib/application/resumeFileStore";
-
-// ── Minimal shapes for the dynamically-imported parsers (avoids depending on
-//    the packages' own type exports; casts stay valid across versions). ──────
-type PdfTextItem = { str?: string };
-type PdfPage = { getTextContent: () => Promise<{ items: PdfTextItem[] }> };
-type PdfDoc = { numPages: number; getPage: (n: number) => Promise<PdfPage> };
-type PdfjsModule = {
-  version: string;
-  GlobalWorkerOptions: { workerSrc: string };
-  getDocument: (src: { data: ArrayBuffer }) => { promise: Promise<PdfDoc> };
-};
-type MammothModule = {
-  extractRawText: (input: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }>;
-};
-
-// Extract text from a PDF using pdfjs-dist. The worker is served from the app
-// itself (copied into /public) so its version always matches the installed
-// package — no CDN dependency and no version-mismatch 404s.
-async function extractPdfText(file: File): Promise<string> {
-  const pdfjs = (await import("pdfjs-dist")) as unknown as PdfjsModule;
-  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-  const data = await file.arrayBuffer();
-  const doc = await pdfjs.getDocument({ data }).promise;
-  let out = "";
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    out += content.items.map((it) => it.str ?? "").join(" ") + "\n";
-  }
-  return out.trim();
-}
-
-// Extract text from a .docx using mammoth (handles CJS default-interop).
-async function extractDocxText(file: File): Promise<string> {
-  const mod = (await import("mammoth")) as unknown as MammothModule & { default?: MammothModule };
-  const mammoth = mod.default ?? mod;
-  const arrayBuffer = await file.arrayBuffer();
-  const { value } = await mammoth.extractRawText({ arrayBuffer });
-  return value.trim();
-}
+import { extractPdfText, extractDocxText } from "@/lib/resume/parseResumeFile";
 
 interface ResumeInputPanelProps {
   value: string;

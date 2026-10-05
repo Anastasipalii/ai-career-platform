@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getCurrentUserId, clearCareerAISensitive } from "@/lib/security/clientStorage";
 import { checkAdminAccess } from "@/lib/simulation/adminAccess";
 import {
   FileText, Mail, Network, Languages, Mic,
@@ -145,6 +146,9 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     closeAll();
+    // Clear this user's sensitive CareerAI browser state before sign-out
+    // (defensive; the SIGNED_OUT auth listener also clears).
+    clearCareerAISensitive(getCurrentUserId());
     await supabase.auth.signOut(); // onAuthStateChange updates the header immediately
   };
 

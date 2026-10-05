@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest } from "next/server";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -161,7 +162,8 @@ Provide:
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   if (!process.env.OPENAI_API_KEY) {
     return errorResponse(
       "OpenAI is not configured. Add OPENAI_API_KEY to environment variables.",
@@ -231,4 +233,5 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "AI request failed.";
     return errorResponse(msg, 500);
   }
+  });
 }

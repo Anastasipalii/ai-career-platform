@@ -1,5 +1,11 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest } from "next/server";
+
+// Streaming server handler — always dynamic, Node runtime (prevents static
+// route-collection/caching quirks that can surface as a 405 on POST).
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type ImproveAction = "improve" | "rewrite" | "shorten" | "translate";
 
@@ -18,7 +24,11 @@ function buildPrompt(
 ): { system: string; user: string } {
   const base =
     "You are an expert professional resume writer. Output ONLY the improved resume text — " +
-    "no preamble, no explanation, no markdown formatting, no quotation marks.";
+    "no preamble, no explanation, no markdown formatting, no quotation marks. " +
+    "FACTUAL INTEGRITY (critical): rephrase and restructure ONLY the content provided. Never invent or add " +
+    "employers, job titles, employment dates, education, degrees, certifications, metrics/numbers, skills, " +
+    "achievements, or language proficiency that are not present in the input. If information is missing, improve " +
+    "wording without adding unsupported facts.";
 
   switch (action) {
     case "improve":
@@ -70,7 +80,8 @@ const errorJson = (msg: string, status: number) =>
     headers: { "Content-Type": "application/json" },
   });
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   if (!process.env.OPENAI_API_KEY) {
     return errorJson(
       "OpenAI is not configured. Please add OPENAI_API_KEY to your environment variables.",
@@ -134,4 +145,5 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : "AI request failed.";
     return errorJson(message, 500);
   }
+  });
 }

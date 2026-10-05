@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest, NextResponse } from "next/server";
 import { LANGUAGE_RULE_RESUME, languageRule } from "@/lib/promptLanguage";
 
@@ -57,7 +58,8 @@ const DEMO_COVER: CoverLetterResult = {
 const json = (source: Source, data: CoverLetterResult, status = 200) =>
   NextResponse.json({ source, data }, { status });
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   let body: AgentBody;
   try {
     body = (await req.json()) as AgentBody;
@@ -138,4 +140,5 @@ export async function POST(req: NextRequest) {
   } catch {
     return json("demo-fallback", DEMO_COVER);
   }
+  });
 }

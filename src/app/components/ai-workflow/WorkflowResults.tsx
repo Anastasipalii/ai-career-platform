@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MOCK_OUTPUTS, type WorkflowOutputs, type JobMatch } from "./mockOutputs";
 import { readWorkflowResults } from "@/lib/workflowResults";
 import { saveApplicationDraft } from "@/lib/application/applicationDraft";
+import { safeHref } from "@/lib/resume/urlSafety";
 import type { ApplicationDraft } from "@/lib/application/types";
 
 // Copy plain text to the clipboard (same pattern the cover-letter page uses).
@@ -314,19 +315,23 @@ export default function WorkflowResults({ show, results, source }: WorkflowResul
                       Prepare Application
                     </button>
                   )}
-                  {m.sourceUrl && (
-                    <a
-                      href={m.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11.5px] font-medium hover:underline"
-                      style={{ color: "#7dd3fc" }}
-                    >
-                      View &amp; apply ↗
-                    </a>
-                  )}
+                  {(() => {
+                    // Provider URL only, validated (http/https). No safe URL → no clickable apply.
+                    const apply = safeHref(m.sourceUrl ?? "");
+                    return apply ? (
+                      <a
+                        href={apply}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11.5px] font-medium hover:underline"
+                        style={{ color: "#7dd3fc" }}
+                      >
+                        View &amp; apply ↗
+                      </a>
+                    ) : null;
+                  })()}
                 </div>
-                {m.sourceUrl && (
+                {safeHref(m.sourceUrl ?? "") && (
                   <p className="text-[10px] text-slate-600 leading-snug">
                     Availability and application options are controlled by the external provider.
                   </p>

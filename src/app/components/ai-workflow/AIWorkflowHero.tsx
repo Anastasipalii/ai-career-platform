@@ -31,9 +31,9 @@ export default function AIWorkflowHero() {
 
         {/* Subtitle */}
         <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-          Compose the platform&apos;s AI agents, n8n automations, and scheduled
-          triggers into end-to-end workflows — from a job description to a
-          ready-to-send application kit, running on autopilot.
+          Run the platform&apos;s AI agents as one end-to-end pass — from your
+          résumé and a target role to ranked real jobs, a grounded cover letter,
+          interview prep, and a non-submitting application dry run.
         </p>
 
         {/* CTAs */}
@@ -64,8 +64,8 @@ export default function AIWorkflowHero() {
           {[
             { value: "5", label: "Starter workflows" },
             { value: "7", label: "AI agents to chain" },
-            { value: "n8n", label: "Automation ready" },
-            { value: "DAG", label: "Multi-step logic" },
+            { value: "Dry run", label: "Never auto-submits" },
+            { value: "Real", label: "Live provider jobs" },
           ].map((s, i, arr) => (
             <div key={s.label} className="flex items-center gap-6">
               <div className="text-center">

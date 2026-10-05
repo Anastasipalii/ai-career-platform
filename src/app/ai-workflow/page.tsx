@@ -6,7 +6,7 @@ import AIWorkflowClient from "@/app/components/ai-workflow/AIWorkflowClient";
 export const metadata: Metadata = {
   title: "AI Workflow Studio — CareerAI",
   description:
-    "Chain CareerAI's AI agents, n8n automations, and scheduled triggers into end-to-end workflows — from job description to a ready-to-send application kit.",
+    "Run CareerAI's AI agents as one end-to-end pass — from your résumé and a target role to ranked real jobs, a grounded cover letter, interview prep, and a non-submitting application dry run.",
 };
 
 export default function AIWorkflowPage() {

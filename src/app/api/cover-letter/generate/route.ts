@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest } from "next/server";
 
 interface GenerateBody {
@@ -19,7 +20,8 @@ const errorJson = (msg: string, status: number) =>
     headers: { "Content-Type": "application/json" },
   });
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   if (!process.env.OPENAI_API_KEY) {
     return errorJson("OpenAI is not configured. Add OPENAI_API_KEY to environment variables.", 500);
   }
@@ -117,4 +119,5 @@ Write exactly 4 compelling paragraphs:
     const msg = err instanceof Error ? err.message : "AI request failed.";
     return errorJson(msg, 500);
   }
+  });
 }

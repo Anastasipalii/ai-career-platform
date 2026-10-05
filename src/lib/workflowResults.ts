@@ -11,8 +11,11 @@
 // ============================================================================
 
 import type { WorkflowJobMatch } from "./workflowRun";
+import { writeScoped, readScopedRaw, removeScoped } from "@/lib/security/clientStorage";
 
-/** localStorage key for the most recent completed pipeline run. */
+/** LEGACY unscoped localStorage key (pre-Pass-B). Still exported so the
+ *  account-isolation cleanup can purge it; new writes use a user-scoped key via
+ *  clientStorage ("workflow-results" feature). */
 export const WORKFLOW_RESULTS_KEY = "careerai:workflow-results";
 
 /** Event name broadcast whenever a run is saved/cleared, so any open Dashboard
@@ -81,23 +84,24 @@ function hasStorage(): boolean {
 }
 
 /** Persist a completed run. Safe to call anywhere; no-ops on the server. */
-export function saveWorkflowResults(results: WorkflowResults): void {
+export function saveWorkflowResults(results: WorkflowResults, userId?: string | null): void {
   if (!hasStorage()) return;
+  // User-scoped write — never under the legacy global key (account isolation).
+  writeScoped("workflow-results", results, userId);
   try {
-    window.localStorage.setItem(WORKFLOW_RESULTS_KEY, JSON.stringify(results));
     // Notify any open Dashboard to re-read immediately (same-tab; the native
     // `storage` event only fires across tabs).
     window.dispatchEvent(new CustomEvent(WORKFLOW_UPDATED_EVENT));
   } catch {
-    // Storage unavailable (private mode, quota) — non-fatal for a demo.
+    /* non-fatal */
   }
 }
 
 /** Read the last completed run, or null if none/invalid. */
-export function readWorkflowResults(): WorkflowResults | null {
+export function readWorkflowResults(userId?: string | null): WorkflowResults | null {
   if (!hasStorage()) return null;
   try {
-    const raw = window.localStorage.getItem(WORKFLOW_RESULTS_KEY);
+    const raw = readScopedRaw("workflow-results", userId);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<WorkflowResults>;
     // Minimal shape validation — ignore anything malformed.
@@ -140,10 +144,10 @@ export function readWorkflowResults(): WorkflowResults | null {
 }
 
 /** Remove any stored run. */
-export function clearWorkflowResults(): void {
+export function clearWorkflowResults(userId?: string | null): void {
   if (!hasStorage()) return;
+  removeScoped("workflow-results", userId);
   try {
-    window.localStorage.removeItem(WORKFLOW_RESULTS_KEY);
     window.dispatchEvent(new CustomEvent(WORKFLOW_UPDATED_EVENT));
   } catch {
     // ignore

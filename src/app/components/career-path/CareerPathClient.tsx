@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { authedFetch } from "@/lib/auth/authedFetch";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { CareerGoalData, RoadmapPhase } from "@/app/components/career-path/types";
@@ -8,34 +9,31 @@ import Toast from "@/app/components/ui/Toast";
 import CareerPathHero from "@/app/components/career-path/CareerPathHero";
 import CareerPathUpload from "@/app/components/career-path/CareerPathUpload";
 import CareerGoalForm from "@/app/components/career-path/CareerGoalForm";
+import { readScoped, writeScoped, removeScoped } from "@/lib/security/clientStorage";
 
-// ── LocalStorage key ──────────────────────────────────────────────────────────
-const LS_KEY = "career-planner-state";
+// ── Account-scoped local persistence ───────────────────────────────────────────
+// Roadmap/goals/progress are user-sensitive, so they are stored under the
+// signed-in user's scoped key via clientStorage (never a global key). The legacy
+// unscoped "career-planner-state" key is purged by the account-isolation cleanup.
 
 interface PersistedState {
   phases:       RoadmapPhase[];
   checkedTasks: string[];
   goalData:     CareerGoalData;
+  /** The saved DB row id this local state belongs to (null until saved). */
+  careerPathId: string | null;
 }
 
 function loadFromStorage(): PersistedState | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    return raw ? (JSON.parse(raw) as PersistedState) : null;
-  } catch {
-    return null;
-  }
+  return readScoped<PersistedState>("career-path-state");
 }
 
 function saveToStorage(state: PersistedState) {
-  if (typeof window === "undefined") return;
-  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch {}
+  writeScoped("career-path-state", state);
 }
 
 function clearStorage() {
-  if (typeof window === "undefined") return;
-  try { localStorage.removeItem(LS_KEY); } catch {}
+  removeScoped("career-path-state");
 }
 
 // ── Initial goal ──────────────────────────────────────────────────────────────
@@ -50,7 +48,7 @@ const INITIAL_GOAL: CareerGoalData = {
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function CareerPathClient() {
+export default function CareerPathClient({ initialPathId }: { initialPathId?: string }) {
   const router = useRouter();
 
   const [goalData, setGoalData]         = useState<CareerGoalData>(INITIAL_GOAL);
@@ -61,20 +59,81 @@ export default function CareerPathClient() {
   const [checkedTasks, setCheckedTasks] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus]     = useState<"idle" | "saving" | "saved">("idle");
   const [careerPathId, setCareerPathId] = useState<string | null>(null);
+  const [resumeText, setResumeText]     = useState<string>("");
+  const [pendingDiscard, setPendingDiscard] = useState<null | "regen" | "edit">(null);
+  const [confirmDelete, setConfirmDelete]   = useState(false);
+  const [isDeleting, setIsDeleting]         = useState(false);
+  const [loadingSaved, setLoadingSaved]     = useState<boolean>(!!initialPathId);
   const [toast, setToast]               = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const RESUME_TEXT_CAP = 12000;
+
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
 
   // ── Restore from localStorage on mount ─────────────────────────────────────
   useEffect(() => {
+    if (initialPathId) return; // reopening a saved row — DB wins, see the effect below
     /* eslint-disable react-hooks/set-state-in-effect */
     const saved = loadFromStorage();
     if (saved?.phases?.length) {
       setAiPhases(saved.phases);
       setCheckedTasks(new Set(saved.checkedTasks ?? []));
       setGoalData(saved.goalData ?? INITIAL_GOAL);
+      setCareerPathId(saved.careerPathId ?? null);
       setGenerated(true);
     }
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [initialPathId]);
+
+  // ── Reopen a saved roadmap by id: owner-scoped read, NO AI call ──────────────
+  useEffect(() => {
+    if (!initialPathId) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingSaved(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push("/login"); return; }
+      const { data, error } = await supabase
+        .from("career_paths")
+        .select("id, current_role, target_role, roadmap, progress")
+        .eq("id", initialPathId)
+        .eq("user_id", session.user.id) // defensive owner scoping on top of RLS
+        .single();
+      if (cancelled) return;
+      if (error || !data) { showToast("Couldn't open that saved roadmap.", "error"); setLoadingSaved(false); return; }
+
+      const row = data as Record<string, unknown>;
+      const rm = (row.roadmap && typeof row.roadmap === "object" ? row.roadmap : {}) as Record<string, unknown>;
+      const phases = Array.isArray(rm.phases) ? (rm.phases as RoadmapPhase[]) : [];
+      if (phases.length === 0) {
+        // Old/incompatible row with no stored phases — do NOT reconstruct/invent.
+        showToast("This saved roadmap has no stored steps to display.", "error");
+        setLoadingSaved(false);
+        return;
+      }
+      const savedGoal = (rm.goalData && typeof rm.goalData === "object" ? rm.goalData : {}) as Partial<CareerGoalData>;
+      const checks = Array.isArray(rm.checkedTasks) ? (rm.checkedTasks as string[]).filter((x) => typeof x === "string") : [];
+
+      setAiPhases(phases);
+      setCheckedTasks(new Set(checks));
+      setGoalData({
+        ...INITIAL_GOAL,
+        ...savedGoal,
+        currentTitle: typeof row.current_role === "string" ? row.current_role : (savedGoal.currentTitle ?? ""),
+        targetTitle:  typeof row.target_role === "string" ? row.target_role : (savedGoal.targetTitle ?? ""),
+      });
+      setCareerPathId(String(row.id));
+      setGenerated(true);
+      setLoadingSaved(false);
+      // Rebind local state to THIS saved row (overwrites any stale local roadmap).
+      saveToStorage({ phases, checkedTasks: checks, goalData: { ...INITIAL_GOAL, ...savedGoal }, careerPathId: String(row.id) });
+    })();
+    return () => { cancelled = true; };
+  }, [initialPathId, router, showToast]);
 
   // ── Sync checkedTasks to localStorage whenever they change ──────────────────
   useEffect(() => {
@@ -83,14 +142,18 @@ export default function CareerPathClient() {
         phases:       aiPhases,
         checkedTasks: Array.from(checkedTasks),
         goalData,
+        careerPathId,
       });
     }
-  }, [checkedTasks, generated, aiPhases, goalData]);
+  }, [checkedTasks, generated, aiPhases, goalData, careerPathId]);
 
-  const showToast = useCallback((message: string, type: "success" | "error") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
-  }, []);
+  const handleResumeParsed = useCallback((text: string, name: string) => {
+    setResumeText(text.slice(0, RESUME_TEXT_CAP));
+    setFileName(name);
+    showToast("Résumé parsed — its text will ground your roadmap.", "success");
+  }, [showToast]);
+
+  const clearResume = useCallback(() => { setResumeText(""); setFileName(null); }, []);
 
   // ── Generate ────────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
@@ -100,33 +163,56 @@ export default function CareerPathClient() {
     }
 
     setIsGenerating(true);
-    setGenerated(false);
-    setAiPhases([]);
-    setCheckedTasks(new Set());
-    clearStorage();
 
     try {
-      const res = await fetch("/api/career-path/generate", {
+      const res = await authedFetch("/api/career-path/generate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(goalData),
+        body:    JSON.stringify({ ...goalData, resumeText: resumeText || undefined }),
       });
 
-      const data = await res.json() as { phases?: RoadmapPhase[]; error?: string };
+      const data = await res.json().catch(() => ({})) as { phases?: RoadmapPhase[]; error?: string };
 
-      if (!res.ok || data.error) throw new Error(data.error ?? "Roadmap generation failed.");
+      if (!res.ok || data.error || !data.phases || data.phases.length === 0) {
+        // Preserve the existing roadmap + progress on failure — never wipe first.
+        showToast(data.error ?? "Couldn't generate your roadmap. Please try again.", "error");
+        return;
+      }
 
-      setAiPhases(data.phases ?? []);
+      // Success → the new roadmap supersedes any previous one (fresh progress).
+      setAiPhases(data.phases);
+      setCheckedTasks(new Set());
       setGenerated(true);
       setCareerPathId(null);
       setSaveStatus("idle");
-    } catch (err) {
-      showToast(
-        err instanceof Error ? err.message : "Generation failed. Please try again.",
-        "error"
-      );
+      saveToStorage({ phases: data.phases, checkedTasks: [], goalData, careerPathId: null });
+    } catch {
+      showToast("Something went wrong while generating. Please try again.", "error");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Regenerate discards the current roadmap + progress — gate behind a confirm.
+  const requestRegenerate = () => {
+    if (generated && aiPhases.length > 0) { setPendingDiscard("regen"); return; }
+    void handleGenerate();
+  };
+  const requestEditGoals = () => {
+    if (generated && aiPhases.length > 0) { setPendingDiscard("edit"); return; }
+    setGenerated(false);
+  };
+  const confirmDiscard = () => {
+    const action = pendingDiscard;
+    setPendingDiscard(null);
+    if (action === "regen") { void handleGenerate(); }
+    else if (action === "edit") {
+      // Return to the goal form, preserving the form inputs; drop the roadmap.
+      setGenerated(false);
+      setAiPhases([]);
+      setCheckedTasks(new Set());
+      setCareerPathId(null);
+      clearStorage();
     }
   };
 
@@ -134,12 +220,30 @@ export default function CareerPathClient() {
   const toggleTask = (key: string) => {
     setCheckedTasks((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
 
   // ── Save to Supabase ────────────────────────────────────────────────────────
+  // Owner-scoped delete of the saved roadmap (explicit confirm handled in UI).
+  const handleDeleteSaved = async () => {
+    if (!careerPathId) return;
+    setIsDeleting(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.push("/login"); return; }
+    const { error } = await supabase
+      .from("career_paths")
+      .delete()
+      .eq("id", careerPathId)
+      .eq("user_id", session.user.id);
+    setIsDeleting(false);
+    if (error) { showToast("Couldn't delete this saved roadmap.", "error"); return; }
+    clearStorage();
+    showToast("Saved roadmap deleted.", "success");
+    router.push("/dashboard");
+  };
+
   const handleSave = async () => {
     if (!generated || aiPhases.length === 0) {
       showToast("Generate a roadmap first.", "error");
@@ -161,7 +265,7 @@ export default function CareerPathClient() {
 
     let dbError;
     if (careerPathId) {
-      const { error } = await supabase.from("career_paths").update(payload).eq("id", careerPathId);
+      const { error } = await supabase.from("career_paths").update(payload).eq("id", careerPathId).eq("user_id", session.user.id);
       dbError = error;
     } else {
       const { data, error } = await supabase
@@ -172,7 +276,7 @@ export default function CareerPathClient() {
 
     if (dbError) {
       setSaveStatus("idle");
-      showToast(`Save failed: ${dbError.message}`, "error");
+      showToast("Couldn't save your roadmap. Please try again.", "error");
     } else {
       setSaveStatus("saved");
       showToast("Roadmap saved to your dashboard!", "success");
@@ -197,6 +301,16 @@ export default function CareerPathClient() {
   });
 
   // ── Render ──────────────────────────────────────────────────────────────────
+  if (initialPathId && loadingSaved) {
+    return (
+      <>
+        <CareerPathHero />
+        <div className="section-divider" />
+        <section className="py-24 text-center"><p className="text-sm text-slate-400">Loading your saved roadmap…</p></section>
+      </>
+    );
+  }
+
   return (
     <>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
@@ -223,7 +337,7 @@ export default function CareerPathClient() {
           {/* ── Setup form (always visible if not generated, or collapsible) ── */}
           {!generated ? (
             <div className="flex flex-col gap-4">
-              <CareerPathUpload fileName={fileName} onFileChange={setFileName} />
+              <CareerPathUpload fileName={fileName} onParsed={handleResumeParsed} onClear={clearResume} onError={(m) => showToast(m, "error")} />
               <CareerGoalForm
                 data={goalData}
                 onChange={setGoalData}
@@ -234,6 +348,19 @@ export default function CareerPathClient() {
           ) : (
             /* ── Roadmap dashboard ── */
             <div className="flex flex-col gap-6">
+
+              {/* ── Discard confirmation (regenerate / edit goals) ── */}
+              {pendingDiscard && (
+                <div className="rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: "rgba(236,72,153,0.08)", border: "1px solid rgba(236,72,153,0.25)" }}>
+                  <p className="text-xs text-pink-200 flex-1">
+                    {pendingDiscard === "regen"
+                      ? "Regenerating replaces this roadmap and clears your checked-off progress. Continue?"
+                      : "Editing goals discards this roadmap and its progress. Continue?"}
+                  </p>
+                  <button type="button" onClick={() => setPendingDiscard(null)} className="text-xs px-3 py-1.5 rounded-lg font-semibold" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)" }}>Cancel</button>
+                  <button type="button" onClick={confirmDiscard} className="text-xs px-3 py-1.5 rounded-lg font-semibold" style={{ background: "rgba(236,72,153,0.15)", border: "1px solid rgba(236,72,153,0.35)", color: "#f9a8d4" }}>Continue</button>
+                </div>
+              )}
 
               {/* ── Roadmap header ── */}
               <div
@@ -250,6 +377,7 @@ export default function CareerPathClient() {
                         {goalData.targetTitle}
                       </p>
                     )}
+                    <p className="text-[10px] text-slate-600 mt-1">AI-suggested guidance · timings are estimates, not guarantees</p>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-2xl font-bold tabular-nums leading-none" style={{ color: progressColor }}>
@@ -277,7 +405,7 @@ export default function CareerPathClient() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => { setGenerated(false); clearStorage(); setAiPhases([]); setCheckedTasks(new Set()); }}
+                    onClick={requestEditGoals}
                     className="text-xs text-slate-600 hover:text-slate-400 transition-colors"
                   >
                     Edit goals
@@ -457,7 +585,7 @@ export default function CareerPathClient() {
 
                 <button
                   type="button"
-                  onClick={handleGenerate}
+                  onClick={requestRegenerate}
                   disabled={isGenerating}
                   className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-xs font-medium transition-all duration-200 hover:text-slate-300 disabled:opacity-50"
                   style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b" }}
@@ -475,6 +603,18 @@ export default function CareerPathClient() {
                   Regenerate
                 </button>
               </div>
+
+              {/* ── Delete saved roadmap (owner-scoped, confirmed) ── */}
+              {careerPathId && (
+                confirmDelete ? (
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => setConfirmDelete(false)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }}>Cancel</button>
+                    <button type="button" onClick={handleDeleteSaved} disabled={isDeleting} className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-60" style={{ background: "rgba(239,68,68,0.1)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.25)" }}>{isDeleting ? "Deleting…" : "Delete permanently"}</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setConfirmDelete(true)} className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "rgba(239,68,68,0.06)", color: "#f87171", border: "1px solid rgba(239,68,68,0.18)" }}>Delete saved roadmap</button>
+                )
+              )}
             </div>
           )}
         </div>

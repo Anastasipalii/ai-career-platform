@@ -1,5 +1,8 @@
 "use client";
 
+import { isResumeEmpty } from "@/lib/resume/importResume";
+import { authedFetch } from "@/lib/auth/authedFetch";
+
 import { useState, useEffect, ReactNode } from "react";
 import {
   ResumeFormData,
@@ -291,12 +294,14 @@ function ToolModal({
   }, []);
 
   const resumeText = resumeToText(formData);
+  const emptyResume = isResumeEmpty(formData);
 
   // ── Tool handlers ───────────────────────────────────────────────────────────
   async function runATS() {
+    if (emptyResume) { setError("Add résumé content before running an ATS check."); return; }
     setLoading(true); setError(null); setAtsResult(null);
     try {
-      const res = await fetch("/api/resume/tools", {
+      const res = await authedFetch("/api/resume/tools", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tool: "ats_score", resumeText }),
@@ -312,10 +317,11 @@ function ToolModal({
   }
 
   async function runKeywordMatch() {
+    if (emptyResume) { setError("Add résumé content before matching keywords."); return; }
     if (!jobDesc.trim()) { setError("Please paste a job description."); return; }
     setLoading(true); setError(null); setKeywordResult(null);
     try {
-      const res = await fetch("/api/resume/tools", {
+      const res = await authedFetch("/api/resume/tools", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tool: "keyword_match", resumeText, jobDescription: jobDesc }),
@@ -333,7 +339,7 @@ function ToolModal({
   async function runStreaming(endpoint: string, body: Record<string, unknown>) {
     setLoading(true); setError(null); setStreamOutput(""); setApplied(false);
     try {
-      const res = await fetch(endpoint, {
+      const res = await authedFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

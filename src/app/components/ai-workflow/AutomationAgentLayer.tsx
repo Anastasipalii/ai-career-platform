@@ -74,11 +74,11 @@ const NODES: LayerNode[] = [
     output: "Question bank, feedback, readiness score",
   },
   {
-    name: "n8n Orchestrator",
+    name: "n8n Orchestrator (planned)",
     kind: "infra",
     icon: Workflow,
     accent: "#a855f7",
-    role: "Sequences agents, handles retries, triggers, and branching.",
+    role: "Planned: sequence agents, handle retries, triggers, and branching. Not live in the current release.",
     input: "Run trigger + agent outputs",
     output: "Coordinated multi-step run",
   },
@@ -106,7 +106,7 @@ const NODES: LayerNode[] = [
 const FLOW: { label: string; icon: LucideIcon; accent: string }[] = [
   { label: "User Action", icon: MousePointerClick, accent: "#94a3b8" },
   { label: "AI Agents", icon: Cpu, accent: "#22d3ee" },
-  { label: "n8n Orchestration", icon: Workflow, accent: "#a855f7" },
+  { label: "n8n Orchestration (planned)", icon: Workflow, accent: "#a855f7" },
   { label: "Supabase", icon: Server, accent: "#3ecf8e" },
   { label: "Dashboard", icon: LayoutDashboard, accent: "#a78bfa" },
 ];
@@ -127,10 +127,10 @@ export default function AutomationAgentLayer() {
             Automation &amp; <span className="gradient-text">Agent Layer</span>
           </h2>
           <p className="text-slate-400 text-sm mt-2 leading-relaxed">
-            The pipeline you just ran is a thin surface over a scalable stack. Specialized AI
-            agents do the reasoning, n8n orchestrates the run, Supabase persists every artifact,
-            and the Dashboard reflects it — the same architecture whether it runs for one user or
-            thousands.
+            Today a run executes CareerAI&apos;s specialized AI agents through the app, Supabase
+            persists every artifact per user, and the Dashboard reflects it. The orchestration layer
+            shown below — n8n sequencing, triggers and branching — is planned architecture, not part
+            of the current release.
           </p>
         </div>
 
@@ -214,7 +214,7 @@ export default function AutomationAgentLayer() {
         </div>
 
         <p className="text-[11px] text-slate-600 mt-6">
-          Conceptual architecture · agents and orchestration shown for illustration.
+          Conceptual architecture. The current release runs the AI agents through the app with a non-submitting dry run; n8n orchestration and scheduled triggers are planned, not live.
         </p>
       </div>
     </section>

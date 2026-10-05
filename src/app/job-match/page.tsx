@@ -9,12 +9,17 @@ export const metadata: Metadata = {
     "Upload your resume and discover the roles, companies, and opportunities that best match your skills — powered by AI.",
 };
 
-export default function JobMatchPage() {
+interface PageProps {
+  searchParams: Promise<{ id?: string }>;
+}
+
+export default async function JobMatchPage({ searchParams }: PageProps) {
+  const { id } = await searchParams;
   return (
     <>
       <Navbar />
       <main className="pt-16">
-        <JobMatchClient />
+        <JobMatchClient initialSavedId={id} />
       </main>
       <Footer />
     </>

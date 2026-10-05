@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { withGuard } from "@/lib/security/guard";
 import { NextRequest, NextResponse } from "next/server";
 
 interface AnalyzeBody {
@@ -30,7 +31,8 @@ interface AnalyzeResult {
   error?: string;
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  return withGuard(req, "EXPENSIVE_AI", async (): Promise<Response> => {
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
       { error: "OpenAI is not configured. Add OPENAI_API_KEY to environment variables." },
@@ -110,4 +112,5 @@ Make companies and titles realistic for the ${industry} industry. Vary match sco
     const msg = err instanceof Error ? err.message : "AI analysis failed.";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+  });
 }

@@ -9,12 +9,17 @@ export const metadata: Metadata = {
     "Build a personalised career roadmap based on your current skills, target role, and timeline. AI-powered milestones, skill gaps, and action plans.",
 };
 
-export default function CareerPathPage() {
+interface PageProps {
+  searchParams: Promise<{ id?: string }>;
+}
+
+export default async function CareerPathPage({ searchParams }: PageProps) {
+  const { id } = await searchParams;
   return (
     <>
       <Navbar />
       <main className="pt-16">
-        <CareerPathClient />
+        <CareerPathClient initialPathId={id} />
       </main>
       <Footer />
     </>

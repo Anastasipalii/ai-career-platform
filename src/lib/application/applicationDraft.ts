@@ -8,38 +8,27 @@
 // ============================================================================
 
 import type { ApplicationDraft } from "@/lib/application/types";
+import { writeScoped, readScoped, removeScoped } from "@/lib/security/clientStorage";
 
+/** LEGACY unscoped key (pre-Pass-B); retained for cleanup. New writes are
+ *  user-scoped via clientStorage ("application-draft"). */
 export const APPLICATION_DRAFT_KEY = "careerai:application-draft";
 
 const hasStorage = (): boolean => typeof window !== "undefined" && !!window.localStorage;
 
-export function saveApplicationDraft(draft: ApplicationDraft): void {
+export function saveApplicationDraft(draft: ApplicationDraft, userId?: string | null): void {
   if (!hasStorage()) return;
-  try {
-    window.localStorage.setItem(APPLICATION_DRAFT_KEY, JSON.stringify(draft));
-  } catch {
-    /* ignore quota/serialization errors */
-  }
+  writeScoped("application-draft", draft, userId);
 }
 
-export function readApplicationDraft(): ApplicationDraft | null {
+export function readApplicationDraft(userId?: string | null): ApplicationDraft | null {
   if (!hasStorage()) return null;
-  try {
-    const raw = window.localStorage.getItem(APPLICATION_DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as ApplicationDraft;
-    if (!parsed || typeof parsed !== "object" || !parsed.job) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  const parsed = readScoped<ApplicationDraft>("application-draft", userId);
+  if (!parsed || typeof parsed !== "object" || !parsed.job) return null;
+  return parsed;
 }
 
-export function clearApplicationDraft(): void {
+export function clearApplicationDraft(userId?: string | null): void {
   if (!hasStorage()) return;
-  try {
-    window.localStorage.removeItem(APPLICATION_DRAFT_KEY);
-  } catch {
-    /* ignore */
-  }
+  removeScoped("application-draft", userId);
 }
